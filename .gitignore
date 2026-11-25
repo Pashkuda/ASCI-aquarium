@@ -1,0 +1,7 @@
+# Build artifacts & local runtime config
+*.exe
+*.o
+*.obj
+*.pdb
+config.ini
+debug.log
