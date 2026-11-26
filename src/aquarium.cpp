@@ -1720,51 +1720,77 @@ void Aquarium::DrawSwirls() {
     const Theme& t = CurrentTheme();
     for (const auto& sw : swirls_) {
         float lifeFade = 1.0f;
-        if (sw.age < 1.3f) lifeFade = sw.age / 1.3f;
+        if (sw.age < 1.4f) lifeFade = sw.age / 1.4f;
         else if (sw.age > sw.maxLife - 2.0f) lifeFade = std::max(0.0f, (sw.maxLife - sw.age) / 2.0f);
-        if (lifeFade <= 0.03f) continue;
+        if (lifeFade <= 0.04f) continue;
 
-        float dir = (sw.spinSpeed >= 0.0f) ? 1.0f : -1.0f;
         int cx = static_cast<int>(std::round(sw.x));
         int cy = static_cast<int>(std::round(sw.y));
-        if (cy >= WATER_Y + 3 && cy < FloorYAt(cx) - 1 && lifeFade * sw.strength > 0.45f) {
-            COLORREF coreCol = LerpColor(BgColorAtRow(cy), t.waterSurface, 0.36f * lifeFade * sw.strength);
-            PutChar(cx, cy, (std::sin(sw.angle * 1.5f) > 0.0f) ? L'\x00B0' : L'@', coreCol);
-        }
+        if (cy < WATER_Y + 4 || cy >= FloorYAt(cx) - 2) continue;
 
-        constexpr int STEPS = 11;
-        for (int arm = 0; arm < 2; ++arm) {
-            float baseAng = sw.angle + arm * PI;
-            for (int s = 1; s <= STEPS; ++s) {
-                float u = static_cast<float>(s) / static_cast<float>(STEPS);
-                float theta = baseAng + u * 3.25f * dir;
-                float rx = sw.radius * u * 1.55f;
-                float ry = sw.radius * u * 0.62f;
+        bool rightFlow = (sw.spinSpeed >= 0.0f);
+        float alpha = Clamp(lifeFade * sw.strength * 0.62f, 0.0f, 0.72f);
+        COLORREF bg = BgColorAtRow(cy);
+        COLORREF crestCol = LerpColor(bg, t.waterFoam, alpha * 0.85f);
+        COLORREF bodyCol  = LerpColor(bg, t.waterSurface, alpha);
+        COLORREF tailCol  = LerpColor(bg, t.waterSurface, alpha * 0.58f);
 
-                int px = static_cast<int>(std::round(sw.x + std::cos(theta) * rx));
-                int py = static_cast<int>(std::round(sw.y + std::sin(theta) * ry));
-                if (py < WATER_Y + 3 || py >= FloorYAt(px) - 1) continue;
+        // Laconic ASCII curling wave-ribbon eddy (inspired by classic curling wave art!)
+        bool compact = (sw.radius < 3.4f);
+        int bob = (std::sin(sw.angle * 1.4f) > 0.45f) ? -1 : 0;
 
-                float tangX = -std::sin(theta) * dir * 1.55f;
-                float tangY =  std::cos(theta) * dir * 0.62f;
-                float ratio = std::fabs(tangY) / (std::fabs(tangX) + 0.01f);
-
-                wchar_t ch = L'~';
-                if (u > 0.82f) {
-                    ch = (s % 2 == 0) ? L'\x00B7' : L'.';
-                } else if (ratio < 0.32f) {
-                    ch = (std::sin(theta) > 0.0f) ? L'_' : L'~';
-                } else if (ratio > 1.15f) {
-                    ch = (std::cos(theta) > 0.0f) ? L')' : L'(';
-                } else {
-                    ch = ((tangX * tangY) > 0.0f) ? L'\\' : L'/';
-                }
-
-                float alpha = (1.0f - u * 0.68f) * lifeFade * sw.strength * 0.52f;
-                COLORREF col = LerpColor(BgColorAtRow(py),
-                                         (u < 0.45f) ? t.waterFoam : t.waterSurface,
-                                         Clamp(alpha, 0.0f, 0.72f));
-                PutChar(px, py, ch, col);
+        if (compact) {
+            if (rightFlow) {
+                const wchar_t* spr[3] = {
+                    L"   _      _   ",
+                    L" _(`'-.,_(`'-.",
+                    L"  (_.-'  (_.-'"
+                };
+                const char* msk[3] = {
+                    "   2      2   ",
+                    " 1222111122211",
+                    "  33333  33333"
+                };
+                PutMaskedSprite(cx - 7, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
+            } else {
+                const wchar_t* spr[3] = {
+                    L"   _      _   ",
+                    L".-'`)_,.-'`)_ ",
+                    L"'-._)  '-._)  "
+                };
+                const char* msk[3] = {
+                    "   2      2   ",
+                    "1122211112221 ",
+                    "33333  33333  "
+                };
+                PutMaskedSprite(cx - 7, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
+            }
+        } else {
+            // Graceful larger curling wave swell eddy
+            if (rightFlow) {
+                const wchar_t* spr[3] = {
+                    L"   _     _     _  ",
+                    L"__(`'-._(`'-._(`'-",
+                    L"  (_.-' (_.-' (_. "
+                };
+                const char* msk[3] = {
+                    "   2     2     2  ",
+                    "112221112221112221",
+                    "  33333 33333 333 "
+                };
+                PutMaskedSprite(cx - 9, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
+            } else {
+                const wchar_t* spr[3] = {
+                    L"  _     _     _   ",
+                    L"-'`)_.-'`)_.-'`)__",
+                    L" ._) '-._) '-._)  "
+                };
+                const char* msk[3] = {
+                    "  2     2     2   ",
+                    "122211122211122211",
+                    " 333 33333 33333  "
+                };
+                PutMaskedSprite(cx - 9, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
             }
         }
     }
@@ -1919,67 +1945,52 @@ void Aquarium::DrawBoat() {
 void Aquarium::DrawSurface() {
     const Theme& t = CurrentTheme();
     const COLORREF bgTop = BgColorAtRow(WATER_Y);
-    const COLORREF sub1 = LerpColor(bgTop, t.waterSurface, 0.58f);
-    const COLORREF sub2 = LerpColor(bgTop, t.waterSurface, 0.28f);
+    const COLORREF sub1 = LerpColor(bgTop, t.waterSurface, 0.52f);
+    const COLORREF sub2 = LerpColor(bgTop, t.waterSurface, 0.24f);
+
+    // Classic laconic rolling ASCII curling wave ribbon (inspired by classic surf-curl wave art)
+    const wchar_t* topLip  = L" _      ";
+    const wchar_t* mainWav = L"(`'-.,__";
+    const wchar_t* underW  = L" (_.-'    ";
+    const wchar_t* deepW   = L"   ~-.,_    ";
+
+    int shift1 = static_cast<int>(std::floor(time_ * 3.2f));
+    int shift2 = static_cast<int>(std::floor(time_ * 2.0f));
+    int shift3 = static_cast<int>(std::floor(time_ * 1.1f));
 
     for (int x = 0; x < cols_; ++x) {
-        float h  = SurfaceWaveAt(static_cast<float>(x));
-        float hL = SurfaceWaveAt(static_cast<float>(x - 1));
-        float hR = SurfaceWaveAt(static_cast<float>(x + 1));
-        float slope = hR - hL;
-        bool isPeak = (h >= hL && h >= hR && h > 0.50f);
+        float h = SurfaceWaveAt(static_cast<float>(x));
+        float swell = Clamp((h + 0.6f) * 0.62f, 0.0f, 1.0f);
 
-        // Row WATER_Y - 1: crisp curling ocean wave-crest spirals (хвилі-завихри: /~@~° )
-        if (isPeak) {
-            PutChar(x, WATER_Y - 1, (h > 0.74f) ? L'@' : L'c', t.waterFoam);
-            if (x > 0) PutChar(x - 1, WATER_Y - 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.80f));
-            if (x > 1) PutChar(x - 2, WATER_Y - 1, L'/', LerpColor(t.waterSurface, t.waterFoam, 0.55f));
-            if (x + 1 < cols_) PutChar(x + 1, WATER_Y - 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.62f));
-            if (x + 2 < cols_) PutChar(x + 2, WATER_Y - 1, L'\x00B0', LerpColor(bgTop, t.waterFoam, 0.45f));
-        } else if (h > 0.42f && ((x + static_cast<int>(time_ * 4.5f)) % 8 == 0)) {
-            PutChar(x, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.45f));
+        int i1 = ((x + shift1) % 8 + 8) % 8;
+        int i2 = ((x + shift2) % 10 + 10) % 10;
+        int i3 = ((x + shift3) % 12 + 12) % 12;
+
+        // Row WATER_Y - 1: crisp curling lip crest above each breaking wave curl
+        if (topLip[i1] != L' ') {
+            COLORREF lipCol = LerpColor(t.waterSurface, t.waterFoam, 0.45f + swell * 0.55f);
+            PutChar(x, WATER_Y - 1, topLip[i1], lipCol);
+        } else if (h > 0.72f && i1 == 2) {
+            PutChar(x, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.55f));
         }
 
-        // Row WATER_Y: smooth continuous curling waterline
-        wchar_t waveCh = L'~';
-        if (isPeak && h > 0.62f)          waveCh = L')';
-        else if (h > 0.52f)               waveCh = L'\x2248';
-        else if (h > 0.20f)               waveCh = L'~';
-        else if (h > -0.12f)              waveCh = (std::fabs(slope) > 0.08f) ? L'~' : L'-';
-        else if (h > -0.45f)              waveCh = L'_';
-        else                              waveCh = L',';
+        // Row WATER_Y: continuous seamless curling wave ribbon  (`'-.,__( `'-.,__
+        wchar_t wc = mainWav[i1];
+        bool isCrest = (i1 <= 2);
+        COLORREF wCol = isCrest
+            ? LerpColor(t.waterSurface, t.waterFoam, 0.40f + swell * 0.60f)
+            : LerpColor(LerpColor(bgTop, t.waterSurface, 0.78f), t.waterFoam, swell * 0.28f);
+        PutChar(x, WATER_Y, wc, wCol);
 
-        float crestBlend = Clamp((h + 0.55f) * 0.65f, 0.0f, 1.0f);
-        COLORREF waveCol = LerpColor(LerpColor(bgTop, t.waterSurface, 0.74f), t.waterFoam, crestBlend * 0.72f);
-        PutChar(x, WATER_Y, waveCh, waveCol);
-
-        // Row WATER_Y + 1: gentle undulating subsurface curls
-        float s3  = std::sin(x * 0.16f - time_ * 1.95f + h * 1.6f);
-        float s3L = std::sin((x - 1) * 0.16f - time_ * 1.95f + hL * 1.6f);
-        float s3R = std::sin((x + 1) * 0.16f - time_ * 1.95f + hR * 1.6f);
-        bool s3Peak = (s3 >= s3L && s3 >= s3R && s3 > 0.72f);
-
-        if (s3Peak) {
-            PutChar(x, WATER_Y + 1, L'@', sub1);
-            if (x > 0) PutChar(x - 1, WATER_Y + 1, L'(', sub1);
-            if (x + 1 < cols_) PutChar(x + 1, WATER_Y + 1, L'~', sub1);
-        } else if (s3 > -0.10f) {
-            wchar_t ch3 = (s3 > 0.55f) ? L'\x2248' : ((s3 > 0.20f) ? L'~' : L'-');
-            COLORREF col3 = LerpColor(sub2, sub1, Clamp((s3 + 0.10f) * 0.85f, 0.0f, 1.0f));
-            PutChar(x, WATER_Y + 1, ch3, col3);
-        } else if (h < -0.25f) {
-            PutChar(x, WATER_Y + 1, L'\x00B7', sub2);
+        // Row WATER_Y + 1: soft parallax subsurface wave curls  (_.-'
+        if (underW[i2] != L' ') {
+            COLORREF uCol = LerpColor(sub2, sub1, 0.45f + swell * 0.55f);
+            PutChar(x, WATER_Y + 1, underW[i2], uCol);
         }
 
-        // Row WATER_Y + 2: delicate curling under-wave wisps fading softly into deep water
-        float s4  = std::sin(x * 0.14f + time_ * 1.35f - h * 1.1f);
-        float s4L = std::sin((x - 1) * 0.14f + time_ * 1.35f - hL * 1.1f);
-        float s4R = std::sin((x + 1) * 0.14f + time_ * 1.35f - hR * 1.1f);
-        if (s4 >= s4L && s4 >= s4R && s4 > 0.78f) {
-            PutChar(x, WATER_Y + 2, L'~', sub2);
-            if (x + 1 < cols_) PutChar(x + 1, WATER_Y + 2, L')', sub2);
-        } else if (s4 > 0.52f) {
-            PutChar(x, WATER_Y + 2, (s4 > 0.74f) ? L'~' : L'\x00B7', sub2);
+        // Row WATER_Y + 2: subtle deeper wave shimmer dissolving into ocean depth
+        if (deepW[i3] != L' ' && h > -0.35f) {
+            PutChar(x, WATER_Y + 2, deepW[i3], sub2);
         }
     }
 }
