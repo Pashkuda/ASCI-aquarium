@@ -49,6 +49,7 @@ constexpr UINT IDM_EXIT          = 1007;
 constexpr UINT IDM_SHARK         = 1008;
 constexpr UINT IDM_SUBMARINE     = 1009;
 constexpr UINT IDM_BIGWAVE       = 1010;
+constexpr UINT IDM_ABOVE_ICONS   = 1011;
 constexpr UINT IDM_THEME_BASE    = 2000;
 
 template <typename T>
@@ -71,6 +72,7 @@ struct AppState {
     bool autoPaused = false;
     bool autoPauseEnabled = true;
     bool mouseInteract = true;
+    bool aboveIcons = false;
 
     int width = 1920;
     int height = 1080;
@@ -141,6 +143,7 @@ void LoadConfig() {
     g_app.aquarium.SetTheme(theme);
     g_app.mouseInteract = GetPrivateProfileIntW(L"Settings", L"MouseInteract", 1, cfg.c_str()) != 0;
     g_app.autoPauseEnabled = GetPrivateProfileIntW(L"Settings", L"AutoPause", 1, cfg.c_str()) != 0;
+    g_app.aboveIcons = GetPrivateProfileIntW(L"Settings", L"AboveIcons", 0, cfg.c_str()) != 0;
 }
 
 void SaveConfig() {
@@ -151,6 +154,8 @@ void SaveConfig() {
         g_app.mouseInteract ? L"1" : L"0", cfg.c_str());
     WritePrivateProfileStringW(L"Settings", L"AutoPause",
         g_app.autoPauseEnabled ? L"1" : L"0", cfg.c_str());
+    WritePrivateProfileStringW(L"Settings", L"AboveIcons",
+        g_app.aboveIcons ? L"1" : L"0", cfg.c_str());
 }
 
 bool IsAutostartEnabled() {
@@ -601,8 +606,9 @@ bool AttachToDesktop(HWND hwnd) {
                            ((workerInProgman != nullptr) ||
                             ((GetWindowLongPtrW(progman, GWL_EXSTYLE) & 0x00200000L) != 0));
 
-    HWND targetParent = isRaisedDesktop ? progman : (ws.workerW ? ws.workerW : progman);
-    g_app.defViewHwnd = isRaisedDesktop ? defViewInProgman : nullptr;
+    // When "aboveIcons" is active, parent directly to Progman at HWND_TOP so aquarium covers desktop icons
+    HWND targetParent = (isRaisedDesktop || g_app.aboveIcons) ? progman : (ws.workerW ? ws.workerW : progman);
+    g_app.defViewHwnd = defViewInProgman;
 
     SetParent(hwnd, targetParent);
 
@@ -610,16 +616,34 @@ bool AttachToDesktop(HWND hwnd) {
     style = (style & ~(WS_POPUP | WS_OVERLAPPEDWINDOW)) | WS_CHILD | WS_VISIBLE;
     SetWindowLongPtrW(hwnd, GWL_STYLE, style);
 
+    // Block clicks from passing through to hidden desktop icons when aboveIcons is enabled
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (g_app.aboveIcons) exStyle &= ~WS_EX_TRANSPARENT;
+    else exStyle |= WS_EX_TRANSPARENT;
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
+
     POINT pt{ vx, vy };
     MapWindowPoints(nullptr, targetParent, &pt, 1);
 
-    HWND insertAfter = (isRaisedDesktop && defViewInProgman) ? defViewInProgman : HWND_TOP;
+    HWND insertAfter = g_app.aboveIcons
+        ? HWND_TOP
+        : ((isRaisedDesktop && defViewInProgman) ? defViewInProgman : HWND_TOP);
     SetWindowPos(hwnd, insertAfter, pt.x, pt.y, vw, vh,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+    if (!g_app.aboveIcons && defViewInProgman) {
+        RedrawWindow(defViewInProgman, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    }
 
     InitGraphics(hwnd, vw, vh);
     PresentFrame();
     return true;
+}
+
+void ApplyIconsLayerMode() {
+    if (g_app.windowMode || !g_app.wallpaperHwnd) return;
+    AttachToDesktop(g_app.wallpaperHwnd);
 }
 
 void RestoreOriginalWallpaper() {
@@ -753,6 +777,10 @@ void ShowTrayMenu(HWND trayHwnd) {
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(themeMenu), L"Тема оформлення");
     AppendMenuW(menu, MF_STRING | (g_app.mouseInteract ? MF_CHECKED : 0),
                 IDM_MOUSE, L"Реакція на мишку");
+    if (!g_app.windowMode) {
+        AppendMenuW(menu, MF_STRING | (g_app.aboveIcons ? MF_CHECKED : 0),
+                    IDM_ABOVE_ICONS, L"Поверх іконок (сховати іконки)");
+    }
     AppendMenuW(menu, MF_STRING | (g_app.autoPauseEnabled ? MF_CHECKED : 0),
                 IDM_AUTOPAUSE, L"Автопауза в іграх");
     AppendMenuW(menu, MF_STRING | (g_app.userPaused ? MF_CHECKED : 0),
@@ -796,6 +824,13 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_TIMER: {
             if (wParam == TIMER_CHECK) {
                 g_app.autoPaused = ShouldAutoPause();
+                if (!g_app.windowMode && g_app.aboveIcons && g_app.wallpaperHwnd) {
+                    // Keep aquarium cleanly above desktop icons while staying inside Progman
+                    if (GetWindow(g_app.wallpaperHwnd, GW_HWNDPREV) != nullptr) {
+                        SetWindowPos(g_app.wallpaperHwnd, HWND_TOP, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
+                }
                 return 0;
             }
             if (wParam == TIMER_FRAME) {
@@ -856,6 +891,11 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                         g_app.mouseInteract = !g_app.mouseInteract;
                         SaveConfig();
                         break;
+                    case IDM_ABOVE_ICONS:
+                        g_app.aboveIcons = !g_app.aboveIcons;
+                        SaveConfig();
+                        ApplyIconsLayerMode();
+                        break;
                     case IDM_AUTOPAUSE:
                         g_app.autoPauseEnabled = !g_app.autoPauseEnabled;
                         if (!g_app.autoPauseEnabled) g_app.autoPaused = false;
@@ -909,9 +949,8 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_WINDOWPOSCHANGING: {
             if (!g_app.windowMode && g_app.defViewHwnd) {
                 auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-                // Prevent anything from ever raising the wallpaper above desktop icons
                 if (!(wp->flags & SWP_NOZORDER)) {
-                    wp->hwndInsertAfter = g_app.defViewHwnd;
+                    wp->hwndInsertAfter = g_app.aboveIcons ? HWND_TOP : g_app.defViewHwnd;
                 }
                 wp->flags |= SWP_NOACTIVATE;
             }

@@ -27,8 +27,9 @@ A lightweight, interactive ASCII-art live desktop wallpaper for **Windows 11 (24
   - **Mouse Movement:** Fish react and scatter from quick cursor sweeps, pufferfish inflate, the crab raises its claws and sidesteps, seaweed sways with the cursor current, and the treasure chest opens when hovered.
   - **Click to Feed:** A quick left-click on empty desktop drops sinking ASCII food pellets (`•`, `·`, `*`) with a water ripple — nearby fish turn around and swim to eat them.
 - **System Tray Controls:**
-  - Feed fish
+  - Feed fish, summon shark, summon submarine, trigger big surf wave
   - 5 built-in color themes (*Deep Ocean*, *Matrix Green*, *Retro Amber*, *Neon Cyberpunk*, *Monochrome*)
+  - Toggle **Above Icons (Hide Desktop Icons)** mode — brings the aquarium cleanly in front of desktop icons while keeping normal windows & taskbar on top
   - Toggle mouse interaction, game auto-pause, pause/resume
   - One-click Windows startup toggle (`HKCU\...\Run`)
 
