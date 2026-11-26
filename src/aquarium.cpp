@@ -428,10 +428,15 @@ void Aquarium::Populate() {
                    RandFloat(2.8f, 4.4f), RandFloat(0.65f, 1.0f));
     }
 
-    // Rare majestic Great Shark: spawns randomly once every 30 to 60 minutes (1800..3600 s)
+    // Rare majestic Great Shark: spawns randomly from left or right once every 30 to 60 minutes
     shark_.active = false;
     shark_.nextSpawnTimer = RandFloat(1800.0f, 3600.0f);
     shark_.wakeTimer = 0.0f;
+
+    // Rare quirky Submarine: spawns randomly from left or right once every 20 to 45 minutes
+    sub_.state = SubmarineState::Inactive;
+    sub_.nextSpawnTimer = RandFloat(1200.0f, 2700.0f);
+    sub_.periscopeExt = 0.0f;
 
     foods_.clear();
     ripples_.clear();
@@ -491,6 +496,24 @@ void Aquarium::SummonShark() {
     shark_.vy = 0.0f;
     shark_.phase = RandFloat(0.0f, 2.0f * PI);
     shark_.wakeTimer = 0.4f;
+}
+
+void Aquarium::SummonSubmarine() {
+    const int vb = VisibleBottom();
+    sub_.state = SubmarineState::CruisingIn;
+    sub_.facing = (RandInt(0, 1) == 0) ? 1 : -1;
+    sub_.x = (sub_.facing > 0) ? -25.0f : static_cast<float>(cols_ + 4);
+    float minCruise = 11.0f;
+    float maxCruise = static_cast<float>(std::max(14, vb - 14));
+    sub_.cruiseY = RandFloat(minCruise, maxCruise);
+    sub_.y = sub_.cruiseY;
+    sub_.vx = sub_.facing * RandFloat(3.4f, 4.1f);
+    sub_.vy = 0.0f;
+    sub_.stopX = RandFloat(cols_ * 0.28f, cols_ * 0.62f);
+    sub_.propPhase = 0.0f;
+    sub_.periscopeExt = 0.0f;
+    sub_.stateTimer = 0.0f;
+    sub_.lookDir = sub_.facing;
 }
 
 void Aquarium::SpawnBubble(float x, float y, int size, bool golden) {
@@ -599,6 +622,7 @@ void Aquarium::Update(float dt) {
     UpdateMarineSnow(dt);
     UpdateFood(dt);
     UpdateShark(dt);
+    UpdateSubmarine(dt);
     UpdateFish(dt);
     UpdateTurtle(dt);
     UpdateSeahorses(dt);
@@ -675,6 +699,11 @@ void Aquarium::UpdateShark(float dt) {
     if (!shark_.active) {
         shark_.nextSpawnTimer -= dt;
         if (shark_.nextSpawnTimer <= 0.0f) {
+            // Avoid overlapping directly with an active submarine
+            if (sub_.state != SubmarineState::Inactive) {
+                shark_.nextSpawnTimer = 20.0f;
+                return;
+            }
             SummonShark();
         }
         return;
@@ -718,6 +747,194 @@ void Aquarium::UpdateShark(float dt) {
         (shark_.facing < 0 && shark_.x < -56.0f)) {
         shark_.active = false;
         shark_.nextSpawnTimer = RandFloat(1800.0f, 3600.0f);
+    }
+}
+
+void Aquarium::UpdateSubmarine(float dt) {
+    if (sub_.state == SubmarineState::Inactive) {
+        sub_.nextSpawnTimer -= dt;
+        if (sub_.nextSpawnTimer <= 0.0f) {
+            if (shark_.active) {
+                sub_.nextSpawnTimer = 20.0f;
+                return;
+            }
+            SummonSubmarine();
+        }
+        return;
+    }
+
+    float propSpeed = (sub_.state == SubmarineState::PeriscopeUp ||
+                       sub_.state == SubmarineState::LookingAround ||
+                       sub_.state == SubmarineState::PeriscopeDown) ? 2.2f : 9.5f;
+    sub_.propPhase += dt * propSpeed;
+
+    float propX = (sub_.facing > 0) ? (sub_.x - 0.5f) : (sub_.x + 22.0f);
+    float propY = sub_.y + 2.0f;
+    float centerX = sub_.x + 11.0f;
+
+    switch (sub_.state) {
+        case SubmarineState::CruisingIn: {
+            float targetVx = sub_.facing * 3.8f;
+            float targetVy = std::sin(time_ * 1.1f) * 0.25f;
+            sub_.vx += (targetVx - sub_.vx) * std::min(1.0f, dt * 2.0f);
+            sub_.vy += (targetVy - sub_.vy) * std::min(1.0f, dt * 2.0f);
+            sub_.x += sub_.vx * dt;
+            sub_.y += sub_.vy * dt;
+
+            if (RandInt(0, 14) == 0 && propX > 1.0f && propX < cols_ - 1.0f) {
+                SpawnBubble(propX, propY + RandFloat(-0.5f, 0.5f), RandInt(0, 1));
+            }
+            if (RandInt(0, 140) == 0 && propX > 2.0f && propX < cols_ - 2.0f) {
+                SpawnSwirl(propX, propY, RandFloat(2.0f, 3.0f), 0.75f, -sub_.facing * 0.6f);
+            }
+
+            bool reachedStop = (sub_.facing > 0) ? (sub_.x >= sub_.stopX) : (sub_.x <= sub_.stopX);
+            if (reachedStop) {
+                sub_.state = SubmarineState::Surfacing;
+                sub_.stateTimer = 0.0f;
+            }
+            break;
+        }
+
+        case SubmarineState::Surfacing: {
+            // Decelerate smoothly and ascend until the conning tower rises cleanly above the waterline
+            float targetVx = sub_.facing * 0.9f;
+            float targetVy = -2.35f;
+            sub_.vx += (targetVx - sub_.vx) * std::min(1.0f, dt * 1.6f);
+            sub_.vy += (targetVy - sub_.vy) * std::min(1.0f, dt * 2.2f);
+            sub_.x += sub_.vx * dt;
+            sub_.y += sub_.vy * dt;
+
+            // Ballast tank bubbles streaming upward while surfacing
+            if (RandInt(0, 8) == 0) {
+                SpawnBubble(sub_.x + RandFloat(3.0f, 18.0f), sub_.y + 1.0f, RandInt(0, 2));
+            }
+
+            if (sub_.y <= 2.15f) {
+                sub_.y = 2.0f;
+                sub_.vy = 0.0f;
+                sub_.state = SubmarineState::PeriscopeUp;
+                sub_.stateTimer = 0.0f;
+                // Surface splash & wave swell as submarine breaks through the water!
+                surfaceDisturbX_ = centerX;
+                surfaceDisturbAmp_ = 1.25f;
+                Ripple rp{ centerX, 3.0f, 1.5f, 10.0f, 1.0f };
+                ripples_.push_back(rp);
+            }
+            break;
+        }
+
+        case SubmarineState::PeriscopeUp: {
+            sub_.vx *= std::exp(-dt * 2.6f);
+            sub_.x += sub_.vx * dt;
+            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.18f;
+            sub_.periscopeExt = std::min(1.0f, sub_.periscopeExt + dt * 0.85f);
+            sub_.lookDir = sub_.facing;
+
+            if (sub_.periscopeExt >= 1.0f) {
+                sub_.state = SubmarineState::LookingAround;
+                sub_.stateTimer = 0.0f;
+            }
+            break;
+        }
+
+        case SubmarineState::LookingAround: {
+            sub_.vx *= std::exp(-dt * 3.0f);
+            sub_.x += sub_.vx * dt;
+            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.18f;
+            sub_.stateTimer += dt;
+
+            // Smoothly look forward -> center -> backward -> center -> forward
+            if (sub_.stateTimer < 1.3f) {
+                sub_.lookDir = sub_.facing;
+            } else if (sub_.stateTimer < 2.2f) {
+                sub_.lookDir = 0;
+            } else if (sub_.stateTimer < 3.8f) {
+                sub_.lookDir = -sub_.facing;
+            } else if (sub_.stateTimer < 4.6f) {
+                sub_.lookDir = 0;
+            } else {
+                sub_.lookDir = sub_.facing;
+            }
+
+            // Gentle surface wave lapping around the surfaced conning tower
+            if (RandInt(0, 40) == 0) {
+                surfaceDisturbX_ = centerX;
+                surfaceDisturbAmp_ = std::max(surfaceDisturbAmp_, 0.45f);
+            }
+
+            if (sub_.stateTimer >= 5.6f) {
+                sub_.state = SubmarineState::PeriscopeDown;
+                sub_.stateTimer = 0.0f;
+            }
+            break;
+        }
+
+        case SubmarineState::PeriscopeDown: {
+            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.18f;
+            sub_.periscopeExt = std::max(0.0f, sub_.periscopeExt - dt * 0.95f);
+
+            if (sub_.periscopeExt <= 0.0f) {
+                sub_.state = SubmarineState::Diving;
+                sub_.stateTimer = 0.0f;
+                // Vent air bubbles as ballast tanks flood for diving!
+                for (int i = 0; i < 6; ++i) {
+                    SpawnBubble(sub_.x + RandFloat(3.0f, 18.0f), 2.8f, RandInt(0, 2));
+                }
+                surfaceDisturbX_ = centerX;
+                surfaceDisturbAmp_ = 1.1f;
+            }
+            break;
+        }
+
+        case SubmarineState::Diving: {
+            float targetVx = sub_.facing * 3.8f;
+            float targetVy = 2.1f;
+            sub_.vx += (targetVx - sub_.vx) * std::min(1.0f, dt * 1.5f);
+            sub_.vy += (targetVy - sub_.vy) * std::min(1.0f, dt * 1.8f);
+            sub_.x += sub_.vx * dt;
+            sub_.y += sub_.vy * dt;
+
+            if (RandInt(0, 9) == 0) {
+                SpawnBubble(sub_.x + RandFloat(2.0f, 19.0f), sub_.y + 1.0f, RandInt(0, 2));
+            }
+            if (RandInt(0, 14) == 0 && propX > 1.0f && propX < cols_ - 1.0f) {
+                SpawnBubble(propX, propY, 0);
+            }
+
+            if (sub_.y >= sub_.cruiseY) {
+                sub_.y = sub_.cruiseY;
+                sub_.state = SubmarineState::CruisingOut;
+                sub_.stateTimer = 0.0f;
+            }
+            break;
+        }
+
+        case SubmarineState::CruisingOut: {
+            float targetVx = sub_.facing * 4.0f;
+            float targetVy = std::sin(time_ * 1.1f) * 0.25f;
+            sub_.vx += (targetVx - sub_.vx) * std::min(1.0f, dt * 1.8f);
+            sub_.vy += (targetVy - sub_.vy) * std::min(1.0f, dt * 2.0f);
+            sub_.x += sub_.vx * dt;
+            sub_.y += sub_.vy * dt;
+
+            if (RandInt(0, 14) == 0 && propX > 1.0f && propX < cols_ - 1.0f) {
+                SpawnBubble(propX, propY + RandFloat(-0.5f, 0.5f), RandInt(0, 1));
+            }
+            if (RandInt(0, 130) == 0 && propX > 2.0f && propX < cols_ - 2.0f) {
+                SpawnSwirl(propX, propY, RandFloat(2.0f, 3.0f), 0.75f, -sub_.facing * 0.6f);
+            }
+
+            if ((sub_.facing > 0 && sub_.x > cols_ + 8.0f) ||
+                (sub_.facing < 0 && sub_.x < -30.0f)) {
+                sub_.state = SubmarineState::Inactive;
+                sub_.nextSpawnTimer = RandFloat(1200.0f, 2700.0f);
+            }
+            break;
+        }
+
+        case SubmarineState::Inactive:
+            break;
     }
 }
 
@@ -1010,6 +1227,20 @@ void Aquarium::UpdateFish(float dt) {
                 f.desiredFacing = (f.vx >= 0.0f) ? 1 : -1;
                 f.scaredTimer = std::max(f.scaredTimer,
                     (f.species == FishSpecies::Puffer) ? 2.4f : 0.75f);
+            }
+        }
+
+        // Respectful clearance around the humming submarine hull
+        if (sub_.state != SubmarineState::Inactive) {
+            float subCx = sub_.x + 11.0f;
+            float subCy = sub_.y + 2.0f;
+            float sdx = f.x - subCx;
+            float sdy = (f.y - subCy) * 1.9f;
+            float sdist = std::sqrt(sdx * sdx + sdy * sdy);
+            if (sdist < 19.0f && sdist > 0.1f) {
+                float push = 1.0f - sdist / 19.0f;
+                f.vx += (sdx / sdist) * f.baseSpeed * (1.1f + push) * dt * 3.0f;
+                f.vy += ((f.y - subCy) / (sdist + 0.1f)) * 6.0f * dt * 2.5f;
             }
         }
 
@@ -2008,6 +2239,94 @@ void Aquarium::DrawShark() {
     }
 }
 
+void Aquarium::DrawSubmarine(bool surfaceOverlay) {
+    if (sub_.state == SubmarineState::Inactive) return;
+
+    const Theme& t = CurrentTheme();
+    int ix = static_cast<int>(std::round(sub_.x));
+    int iy = std::max(2, static_cast<int>(std::round(sub_.y)));
+
+    COLORREF hullCol  = LerpColor(t.chestGold, t.sand, 0.28f);
+    COLORREF towerCol = LerpColor(t.rockLight, t.chestGold, 0.30f);
+    COLORREF trimCol  = t.waterFoam;
+    COLORREF glowCol  = t.fishEye;
+
+    bool surfaced = (sub_.y <= 4.2f);
+    // When surfaced, render the full vessel cleanly after DrawSurface() so waves never overwrite its deck/portholes
+    if (surfaceOverlay != surfaced) return;
+
+    // Animated spinning propeller blade
+    int pFrame = static_cast<int>(sub_.propPhase) % 3;
+    wchar_t propCh = (pFrame == 0) ? L'+' : ((pFrame == 1) ? L'x' : L'*');
+
+    if (sub_.facing >= 0) {
+        wchar_t row2[24] = L"+=|  (o) (o) (o)   )  ";
+        row2[0] = propCh;
+        const wchar_t* spr[4] = {
+            L"        .===.         ",
+            L"  .____|_____|____.   ",
+            row2,
+            L"  `---------------'   "
+        };
+        const char* msk[4] = {
+            "        22222         ",
+            "  11111222222211111   ",
+            "33100343034303430001  ",
+            "  11111111111111111   "
+        };
+        PutMaskedSprite(ix, iy, spr, msk, 4, hullCol, towerCol, trimCol, glowCol);
+    } else {
+        wchar_t row2[24] = L"  (   (o) (o) (o)  |=+";
+        row2[21] = propCh;
+        const wchar_t* spr[4] = {
+            L"         .===.        ",
+            L"   .____|_____|____.  ",
+            row2,
+            L"   `---------------'  "
+        };
+        const char* msk[4] = {
+            "         22222        ",
+            "   11111222222211111  ",
+            "  10003430343034300133",
+            "   11111111111111111  "
+        };
+        PutMaskedSprite(ix, iy, spr, msk, 4, hullCol, towerCol, trimCol, glowCol);
+    }
+
+    int towerCenter = ix + (sub_.facing >= 0 ? 10 : 11);
+
+    if (surfaced) {
+        // Gentle white foam lapping cleanly against the bow and stern at waterline
+        PutChar(ix + 1,  iy + 1, L'~', t.waterFoam);
+        PutChar(ix + 20, iy + 1, L'~', t.waterFoam);
+    }
+
+    // Extending & rotating periscope above conning tower!
+    if (sub_.periscopeExt > 0.15f) {
+        PutChar(towerCenter, iy - 1, L'|', towerCol);
+    }
+    if (sub_.periscopeExt > 0.65f) {
+        bool glint = (sub_.state == SubmarineState::LookingAround) &&
+                     (static_cast<int>(time_ * 4.5f) % 5 == 0);
+        wchar_t lensCh = glint ? L'*' : L'o';
+        COLORREF lensCol = glint ? t.food : glowCol;
+
+        if (sub_.lookDir > 0) {
+            PutChar(towerCenter,     iy - 2, L',', towerCol);
+            PutChar(towerCenter + 1, iy - 2, L'=', towerCol);
+            PutChar(towerCenter + 2, iy - 2, lensCh, lensCol);
+        } else if (sub_.lookDir < 0) {
+            PutChar(towerCenter - 2, iy - 2, lensCh, lensCol);
+            PutChar(towerCenter - 1, iy - 2, L'=', towerCol);
+            PutChar(towerCenter,     iy - 2, L',', towerCol);
+        } else {
+            PutChar(towerCenter - 1, iy - 2, L'(', towerCol);
+            PutChar(towerCenter,     iy - 2, lensCh, lensCol);
+            PutChar(towerCenter + 1, iy - 2, L')', towerCol);
+        }
+    }
+}
+
 void Aquarium::DrawJellyfish() {
     const Theme& t = CurrentTheme();
     for (const auto& j : jellies_) {
@@ -2394,6 +2713,7 @@ void Aquarium::Render() {
     DrawSeahorses();
     DrawTurtle();
     DrawShark();        // rare majestic unhurried Great Shark
+    DrawSubmarine(false);
     DrawJellyfish();
     DrawFishLayer(1);   // midground fish
     DrawFishLayer(2);   // foreground fish
@@ -2404,4 +2724,5 @@ void Aquarium::Render() {
     DrawRipples();
     DrawSparkles();
     DrawSurface();
+    DrawSubmarine(true); // conning tower & periscope rising above the waves!
 }

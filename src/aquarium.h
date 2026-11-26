@@ -113,6 +113,33 @@ struct Shark {
     float wakeTimer = 0.0f;
 };
 
+enum class SubmarineState {
+    Inactive,
+    CruisingIn,
+    Surfacing,
+    PeriscopeUp,
+    LookingAround,
+    PeriscopeDown,
+    Diving,
+    CruisingOut
+};
+
+struct Submarine {
+    SubmarineState state = SubmarineState::Inactive;
+    float x = 0.0f;
+    float y = 0.0f;
+    float vx = 0.0f;
+    float vy = 0.0f;
+    float cruiseY = 14.0f;
+    float stopX = 60.0f;
+    int facing = 1;           // +1 right, -1 left
+    float propPhase = 0.0f;
+    float periscopeExt = 0.0f; // 0.0 (retracted) .. 1.0 (fully raised)
+    float stateTimer = 0.0f;
+    int lookDir = 1;          // -1 left, 0 center, +1 right
+    float nextSpawnTimer = 0.0f; // 1200..2700 seconds (20-45 min)
+};
+
 struct Bubble {
     float x, y;
     float vy;
@@ -197,6 +224,7 @@ public:
     void DropFood(float col, float row, int count = 6);
     void DropFoodFromSurface(int count = 14);
     void SummonShark();
+    void SummonSubmarine();
 
     int Cols() const { return cols_; }
     int Rows() const { return rows_; }
@@ -233,6 +261,7 @@ private:
     void UpdateMarineSnow(float dt);
     void UpdateSwirls(float dt);
     void UpdateShark(float dt);
+    void UpdateSubmarine(float dt);
 
     void DrawLightRays();
     void DrawMarineSnow();
@@ -246,6 +275,7 @@ private:
     void DrawSeahorses();
     void DrawTurtle();
     void DrawShark();
+    void DrawSubmarine(bool surfaceOverlay);
     void DrawJellyfish();
     void DrawFishLayer(int layer);
     void DrawSingleFish(const Fish& f);
@@ -283,6 +313,7 @@ private:
     std::vector<MarineSpeck> specks_;
     std::vector<WaterSwirl> swirls_;
     Shark shark_{};
+    Submarine sub_{};
     std::vector<Bubble> bubbles_;
     std::vector<FoodPellet> foods_;
     std::vector<Ripple> ripples_;

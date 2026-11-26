@@ -47,6 +47,7 @@ constexpr UINT IDM_AUTOSTART     = 1005;
 constexpr UINT IDM_REATTACH      = 1006;
 constexpr UINT IDM_EXIT          = 1007;
 constexpr UINT IDM_SHARK         = 1008;
+constexpr UINT IDM_SUBMARINE     = 1009;
 constexpr UINT IDM_THEME_BASE    = 2000;
 
 template <typename T>
@@ -732,6 +733,7 @@ void ShowTrayMenu(HWND trayHwnd) {
 
     AppendMenuW(menu, MF_STRING, IDM_FEED, L"Погодувати рибок");
     AppendMenuW(menu, MF_STRING, IDM_SHARK, L"Покликати акулу");
+    AppendMenuW(menu, MF_STRING, IDM_SUBMARINE, L"Покликати субмарину");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(themeMenu), L"Тема оформлення");
     AppendMenuW(menu, MF_STRING | (g_app.mouseInteract ? MF_CHECKED : 0),
@@ -828,6 +830,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                         break;
                     case IDM_SHARK:
                         g_app.aquarium.SummonShark();
+                        break;
+                    case IDM_SUBMARINE:
+                        g_app.aquarium.SummonSubmarine();
                         break;
                     case IDM_MOUSE:
                         g_app.mouseInteract = !g_app.mouseInteract;
