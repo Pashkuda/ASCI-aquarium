@@ -790,22 +790,31 @@ void Aquarium::UpdateBigWave(float dt) {
         return;
     }
 
-    bigWave_.phase += dt * 7.5f;
+    bigWave_.phase += dt * 6.5f;
     bigWave_.x += bigWave_.vx * dt;
 
-    float crestX = bigWave_.x + (bigWave_.facing < 0 ? 12.0f : 22.0f);
+    float crestX = bigWave_.x + (bigWave_.facing < 0 ? 11.0f : 23.0f);
     if (crestX > 2.0f && crestX < cols_ - 2.0f) {
         surfaceDisturbX_ = crestX;
         surfaceDisturbAmp_ = 1.45f;
 
+        // Airborne foam droplets flying off the curling breaking lip!
+        if (RandInt(0, 2) == 0) {
+            float lipX = bigWave_.x + (bigWave_.facing < 0 ? RandFloat(5.0f, 11.0f) : RandFloat(23.0f, 29.0f));
+            Sparkle spray{ lipX, static_cast<float>(WATER_Y - 4) + RandFloat(-1.2f, 1.4f),
+                           RandFloat(0.22f, 0.45f),
+                           (RandInt(0, 2) == 0) ? L'\x00B0' : ((RandInt(0, 1) == 0) ? L'\x00B7' : L'*') };
+            sparkles_.push_back(spray);
+        }
+
         // Aerated bubbles plunging downward beneath the breaking curl
-        if (RandInt(0, 3) == 0) {
-            SpawnBubble(crestX + RandFloat(-5.0f, 5.0f),
-                        static_cast<float>(WATER_Y) + RandFloat(1.0f, 3.2f),
+        if (RandInt(0, 2) == 0) {
+            SpawnBubble(crestX + RandFloat(-6.0f, 6.0f),
+                        static_cast<float>(WATER_Y) + RandFloat(0.8f, 3.4f),
                         RandInt(0, 2));
         }
         // Occasional rolling underwater wave-eddy spawned beneath the crashing surge
-        if (RandInt(0, 42) == 0) {
+        if (RandInt(0, 38) == 0) {
             SpawnSwirl(crestX, static_cast<float>(WATER_Y + 5), RandFloat(2.8f, 4.0f),
                        1.1f, bigWave_.facing * 1.4f);
         }
@@ -1859,16 +1868,17 @@ void Aquarium::DrawSwirls() {
         COLORREF bodyCol  = LerpColor(bg, t.waterSurface, alpha);
         COLORREF tailCol  = LerpColor(bg, t.waterSurface, alpha * 0.58f);
 
-        // Laconic ASCII curling wave-ribbon eddy (inspired by classic curling wave art!)
+        // Gently animated laconic wave-curl underwater eddy (undulates as it drifts!)
         bool compact = (sw.radius < 3.4f);
         int bob = (std::sin(sw.angle * 1.4f) > 0.45f) ? -1 : 0;
+        bool alt = (static_cast<int>(sw.angle * 1.6f) % 2 == 0);
 
         if (compact) {
             if (rightFlow) {
                 const wchar_t* spr[3] = {
-                    L"   _      _   ",
-                    L" _(`'-.,_(`'-.",
-                    L"  (_.-'  (_.-'"
+                    alt ? L"   _      _   " : L"  ~       ~   ",
+                    alt ? L" _(`'-.,_(`'-." : L" ~(`'-.,~(`'-.",
+                    alt ? L"  (_.-'  (_.-'" : L"   (_.-'  `.-'"
                 };
                 const char* msk[3] = {
                     "   2      2   ",
@@ -1878,9 +1888,9 @@ void Aquarium::DrawSwirls() {
                 PutMaskedSprite(cx - 7, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
             } else {
                 const wchar_t* spr[3] = {
-                    L"   _      _   ",
-                    L".-'`)_,.-'`)_ ",
-                    L"'-._)  '-._)  "
+                    alt ? L"   _      _   " : L"   ~       ~  ",
+                    alt ? L".-'`)_,.-'`)_ " : L".-'`)~,-.'`)~ ",
+                    alt ? L"'-._)  '-._)  " : L"'-.'  '-._)   "
                 };
                 const char* msk[3] = {
                     "   2      2   ",
@@ -1890,12 +1900,11 @@ void Aquarium::DrawSwirls() {
                 PutMaskedSprite(cx - 7, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
             }
         } else {
-            // Graceful larger curling wave swell eddy
             if (rightFlow) {
                 const wchar_t* spr[3] = {
-                    L"   _     _     _  ",
-                    L"__(`'-._(`'-._(`'-",
-                    L"  (_.-' (_.-' (_. "
+                    alt ? L"   _     _     _  " : L"  ~     _     ~   ",
+                    alt ? L"__(`'-._(`'-._(`'-" : L"~_(`'-.,(`'-._(`'-",
+                    alt ? L"  (_.-' (_.-' (_. " : L"   (_.-'  (_.-'   "
                 };
                 const char* msk[3] = {
                     "   2     2     2  ",
@@ -1905,9 +1914,9 @@ void Aquarium::DrawSwirls() {
                 PutMaskedSprite(cx - 9, cy - 1 + bob, spr, msk, 3, bodyCol, crestCol, tailCol, crestCol);
             } else {
                 const wchar_t* spr[3] = {
-                    L"  _     _     _   ",
-                    L"-'`)_.-'`)_.-'`)__",
-                    L" ._) '-._) '-._)  "
+                    alt ? L"  _     _     _   " : L"   ~     _     ~  ",
+                    alt ? L"-'`)_.-'`)_.-'`)__" : L"-'`)_.-'`),.-'`)_~",
+                    alt ? L" ._) '-._) '-._)  " : L"   '-._)  '-._)   "
                 };
                 const char* msk[3] = {
                     "  2     2     2   ",
@@ -1924,61 +1933,125 @@ void Aquarium::DrawBigWave() {
     if (!bigWave_.active) return;
     const Theme& t = CurrentTheme();
     int ix = static_cast<int>(std::round(bigWave_.x));
-    int topY = WATER_Y - 5; // 6-row towering surf wave rising cleanly above WATER_Y
+    // Gentle vertical swell breathing as the breaking wave surges and crashes across the sea
+    int swellShift = (std::sin(bigWave_.phase * 0.42f) > 0.55f) ? -1 : 0;
+    int topY = (WATER_Y - 5) + swellShift;
+    int frame = static_cast<int>(bigWave_.phase) % 4;
 
     COLORREF baseCol   = t.waterSurface;
     COLORREF foamCol   = t.waterFoam;
     COLORREF barrelCol = LerpColor(t.bgTop, t.waterSurface, 0.72f);
 
     if (bigWave_.facing < 0) {
-        // Iconic breaking surf wave rolling right -> left (breaking left!)
-        const wchar_t* spr[6] = {
-            L"        _.====.._                 ",
-            L"      ,:._      ~-_               ",
-            L"          `\\      ~-_             ",
-            L"            | _ _  | `.           ",
-            L"           ,/ /_)/ | |   ~-_      ",
-            L" -.._..-'  \\_ \\\\ `_     ~~--.._   "
+        // 4-frame fluidly churning breaking surf wave rolling right -> left!
+        static const wchar_t* frames[4][6] = {
+            {
+                L"        _.====.._                 ",
+                L"      ,:._      ~-_               ",
+                L"          `\\      ~-_             ",
+                L"            | _ _  | `.           ",
+                L"           ,/ /_)/ | |   ~-_      ",
+                L" -.._..-'  \\_ \\\\ `_     ~~--.._   "
+            },
+            {
+                L"       _.-~~~~-.._                ",
+                L"     \x00B0,:~_       `-._             ",
+                L"         `\\        ~-_            ",
+                L"           ( ~ _   |  `.          ",
+                L"          ,/ /~)/  | \\   `-._     ",
+                L" ~-.._.-'  \\_  \\\\ `_     `~~--.._ "
+            },
+            {
+                L"        _.\x2248\x2248\x2248\x2248.._                 ",
+                L"      ,:\x00B0._     `-~_              ",
+                L"         .`\\       `-._           ",
+                L"            | _ ~  \\  `.          ",
+                L"          ,/ (_/)  | |   ~-_      ",
+                L" -._..-'~  \\_  \\\\ `_     ~~--._   "
+            },
+            {
+                L"        _.-===--._                ",
+                L"      ,:.~_      ~-_              ",
+                L"          `\\       `-._           ",
+                L"            ( _ _  |  `.          ",
+                L"           ,/ /_)/ \\ |   `-~_     ",
+                L" _.._..-'  \\_ \\\\  `_     `~---.._ "
+            }
         };
         const char* msk[6] = {
-            "        222222222                 ",
-            "      2222000000222               ",
-            "          33000000222             ",
-            "            30303003022           ",
-            "           33033330303000222      ",
-            " 11111111  33033033000002222222   "
+            "       22222222222                ",
+            "     2222200000022222             ",
+            "         33300000022222           ",
+            "           3303030030022          ",
+            "          33033330030300022222    ",
+            " 111111111 33003303300000222222222"
         };
-        PutMaskedSprite(ix, topY, spr, msk, 6, baseCol, foamCol, barrelCol, foamCol);
+        PutMaskedSprite(ix, topY, frames[frame], msk, 6, baseCol, foamCol, barrelCol, foamCol);
 
-        // Animated sparkling spray flying off the curling crest lip
-        bool f2 = (static_cast<int>(bigWave_.phase) % 2 == 0);
-        PutChar(ix + 5, topY + (f2 ? 0 : 1), f2 ? L'\x00B0' : L'\x00B7', foamCol);
-        PutChar(ix + 4, topY + 2, f2 ? L'\x00B7' : L'*', foamCol);
-        PutChar(ix + 7, topY + 2, f2 ? L'*' : L'\x00B0', foamCol);
+        // Swirling foam & crashing mist tumbling right off the curling lip + trailing wake
+        const wchar_t lipMist[4] = { L'\x00B0', L'*', L'\x00B7', L',' };
+        PutChar(ix + 4 + (frame % 2), topY + 1 + (frame % 2), lipMist[frame], foamCol);
+        PutChar(ix + 2 + ((frame + 1) % 3), topY + 2, lipMist[(frame + 2) % 4], foamCol);
+        PutChar(ix + 6 - (frame % 2), topY + 3, (frame % 2 == 0) ? L'~' : L'\x00B0', foamCol);
+        // Rolling whitewater foam trailing behind the wave base
+        for (int k = 0; k < 6; ++k) {
+            wchar_t ch = ((k + frame) % 2 == 0) ? L'\x2248' : L'~';
+            PutChar(ix + 28 + k, WATER_Y, ch, LerpColor(baseCol, foamCol, 1.0f - k * 0.14f));
+        }
     } else {
-        // Exact mirror: breaking surf wave rolling left -> right (breaking right!)
-        const wchar_t* spr[6] = {
-            L"                 _..====._        ",
-            L"               _-~      _.:,      ",
-            L"             _-~      /'          ",
-            L"           .' |  _ _ |            ",
-            L"      _-~   | | (\\_\\ \\,           ",
-            L"   _..--~~     _' // _/  '-.._..- "
+        // 4-frame fluidly churning breaking surf wave rolling left -> right!
+        static const wchar_t* frames[4][6] = {
+            {
+                L"                 _..====._        ",
+                L"               _-~      _.:,      ",
+                L"             _-~      /'          ",
+                L"           .' |  _ _ |            ",
+                L"      _-~   | | (\\_\\ \\,           ",
+                L"   _..--~~     _' // _/  '-.._..- "
+            },
+            {
+                L"                _..-~~~~-._       ",
+                L"             _.-'       _~:,\x00B0     ",
+                L"            _-~        /'         ",
+                L"          .'  |   _ ~ )           ",
+                L"     _.-'   / |  (\\(~ \\,          ",
+                L" _..--~~`     _' //  _/  '-._..- ~"
+            },
+            {
+                L"                 _..\x2248\x2248\x2248\x2248._        ",
+                L"              _~-'     _.\x00B0:,      ",
+                L"           _.-'       /' .        ",
+                L"          .'  /  ~ _ |            ",
+                L"      _-~   | |  (\\_) \\,          ",
+                L"   _.--~~     _' //  _/  ~'-.._.- "
+            },
+            {
+                L"                _.--===-._        ",
+                L"              _-~      _~.:,      ",
+                L"           _.-'       /'          ",
+                L"          .'  |  _ _ )            ",
+                L"     _~-'   | / (\\_\\ \\,           ",
+                L" _..---~`     _'  // _/  '-.._.._ "
+            }
         };
         const char* msk[6] = {
-            "                 222222222        ",
-            "               2220000002222      ",
-            "             22200000033          ",
-            "           22030030303            ",
-            "      22200030303333033           ",
-            "   22222220000033033033  11111111 "
+            "                22222222222       ",
+            "             2222200000022222     ",
+            "           22222000000333         ",
+            "          2200300303033           ",
+            "    22222000303003333033          ",
+            "22222222200000330330033 111111111 "
         };
-        PutMaskedSprite(ix, topY, spr, msk, 6, baseCol, foamCol, barrelCol, foamCol);
+        PutMaskedSprite(ix, topY, frames[frame], msk, 6, baseCol, foamCol, barrelCol, foamCol);
 
-        bool f2 = (static_cast<int>(bigWave_.phase) % 2 == 0);
-        PutChar(ix + 28, topY + (f2 ? 0 : 1), f2 ? L'\x00B0' : L'\x00B7', foamCol);
-        PutChar(ix + 29, topY + 2, f2 ? L'\x00B7' : L'*', foamCol);
-        PutChar(ix + 26, topY + 2, f2 ? L'*' : L'\x00B0', foamCol);
+        const wchar_t lipMist[4] = { L'\x00B0', L'*', L'\x00B7', L',' };
+        PutChar(ix + 29 - (frame % 2), topY + 1 + (frame % 2), lipMist[frame], foamCol);
+        PutChar(ix + 31 - ((frame + 1) % 3), topY + 2, lipMist[(frame + 2) % 4], foamCol);
+        PutChar(ix + 27 + (frame % 2), topY + 3, (frame % 2 == 0) ? L'~' : L'\x00B0', foamCol);
+        for (int k = 0; k < 6; ++k) {
+            wchar_t ch = ((k + frame) % 2 == 0) ? L'\x2248' : L'~';
+            PutChar(ix - 1 - k, WATER_Y, ch, LerpColor(baseCol, foamCol, 1.0f - k * 0.14f));
+        }
     }
 }
 
@@ -2141,52 +2214,58 @@ void Aquarium::DrawBoat() {
 void Aquarium::DrawSurface() {
     const Theme& t = CurrentTheme();
     const COLORREF bgTop = BgColorAtRow(WATER_Y);
-    const COLORREF sub1 = LerpColor(bgTop, t.waterSurface, 0.52f);
-    const COLORREF sub2 = LerpColor(bgTop, t.waterSurface, 0.24f);
+    const COLORREF sub1 = LerpColor(bgTop, t.waterSurface, 0.56f);
+    const COLORREF sub2 = LerpColor(bgTop, t.waterSurface, 0.26f);
 
-    // Classic laconic rolling ASCII curling wave ribbon (inspired by classic surf-curl wave art)
-    const wchar_t* topLip  = L" _      ";
-    const wchar_t* mainWav = L"(`'-.,__";
-    const wchar_t* underW  = L" (_.-'    ";
-    const wchar_t* deepW   = L"   ~-.,_    ";
-
-    int shift1 = static_cast<int>(std::floor(time_ * 3.2f));
-    int shift2 = static_cast<int>(std::floor(time_ * 2.0f));
-    int shift3 = static_cast<int>(std::floor(time_ * 1.1f));
-
+    // Organic multi-harmonic ocean swells with natural curling crests ONLY where real swells peak!
     for (int x = 0; x < cols_; ++x) {
-        float h = SurfaceWaveAt(static_cast<float>(x));
-        float swell = Clamp((h + 0.6f) * 0.62f, 0.0f, 1.0f);
+        float h  = SurfaceWaveAt(static_cast<float>(x));
+        float hL = SurfaceWaveAt(static_cast<float>(x - 1));
+        float hR = SurfaceWaveAt(static_cast<float>(x + 1));
+        float slope = hR - hL;
+        bool isPeak = (h >= hL && h >= hR && h > 0.52f);
 
-        int i1 = ((x + shift1) % 8 + 8) % 8;
-        int i2 = ((x + shift2) % 10 + 10) % 10;
-        int i3 = ((x + shift3) % 12 + 12) % 12;
-
-        // Row WATER_Y - 1: crisp curling lip crest above each breaking wave curl
-        if (topLip[i1] != L' ') {
-            COLORREF lipCol = LerpColor(t.waterSurface, t.waterFoam, 0.45f + swell * 0.55f);
-            PutChar(x, WATER_Y - 1, topLip[i1], lipCol);
-        } else if (h > 0.72f && i1 == 2) {
-            PutChar(x, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.55f));
+        // Row WATER_Y - 1: organic curling foam crest only on real rising swells (never repetitive!)
+        if (isPeak) {
+            PutChar(x, WATER_Y - 1, (h > 0.78f) ? L'\x2248' : L'_', t.waterFoam);
+            if (x > 0) PutChar(x - 1, WATER_Y - 1, L'.', LerpColor(t.waterSurface, t.waterFoam, 0.65f));
+            if (x + 1 < cols_) PutChar(x + 1, WATER_Y - 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.70f));
+            if (x + 2 < cols_ && h > 0.68f) PutChar(x + 2, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.45f));
+        } else if (h > 0.44f && ((x + static_cast<int>(time_ * 4.2f)) % 9 == 0)) {
+            PutChar(x, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.42f));
         }
 
-        // Row WATER_Y: continuous seamless curling wave ribbon  (`'-.,__( `'-.,__
-        wchar_t wc = mainWav[i1];
-        bool isCrest = (i1 <= 2);
-        COLORREF wCol = isCrest
-            ? LerpColor(t.waterSurface, t.waterFoam, 0.40f + swell * 0.60f)
-            : LerpColor(LerpColor(bgTop, t.waterSurface, 0.78f), t.waterFoam, swell * 0.28f);
-        PutChar(x, WATER_Y, wc, wCol);
+        // Row WATER_Y: varied, organic continuous waterline with gentle curl accents at peaks
+        wchar_t waveCh = L'~';
+        if (isPeak && h > 0.64f)     waveCh = L'(';
+        else if (h > 0.54f)          waveCh = (slope < -0.06f) ? L'\'' : L'\x2248';
+        else if (h > 0.22f)          waveCh = L'~';
+        else if (h > -0.10f)         waveCh = (std::fabs(slope) > 0.08f) ? L'~' : L'-';
+        else if (h > -0.44f)         waveCh = L'_';
+        else                         waveCh = L',';
 
-        // Row WATER_Y + 1: soft parallax subsurface wave curls  (_.-'
-        if (underW[i2] != L' ') {
-            COLORREF uCol = LerpColor(sub2, sub1, 0.45f + swell * 0.55f);
-            PutChar(x, WATER_Y + 1, underW[i2], uCol);
+        float crestBlend = Clamp((h + 0.55f) * 0.66f, 0.0f, 1.0f);
+        COLORREF waveCol = LerpColor(LerpColor(bgTop, t.waterSurface, 0.74f), t.waterFoam, crestBlend * 0.72f);
+        PutChar(x, WATER_Y, waveCh, waveCol);
+
+        // Row WATER_Y + 1: varied subsurface shimmer with occasional graceful `(_.-'` curls under swells
+        float s3  = std::sin(x * 0.15f - time_ * 1.85f + h * 1.6f);
+        float s3L = std::sin((x - 1) * 0.15f - time_ * 1.85f + hL * 1.6f);
+        float s3R = std::sin((x + 1) * 0.15f - time_ * 1.85f + hR * 1.6f);
+        if (s3 >= s3L && s3 >= s3R && s3 > 0.74f && h > 0.15f) {
+            PutString(x - 1, WATER_Y + 1, L"(_.-'", sub1);
+        } else if (s3 > -0.08f) {
+            wchar_t ch3 = (s3 > 0.56f) ? L'\x2248' : ((s3 > 0.20f) ? L'~' : L'-');
+            COLORREF col3 = LerpColor(sub2, sub1, Clamp((s3 + 0.08f) * 0.85f, 0.0f, 1.0f));
+            PutChar(x, WATER_Y + 1, ch3, col3);
+        } else if (h < -0.25f) {
+            PutChar(x, WATER_Y + 1, L'\x00B7', sub2);
         }
 
-        // Row WATER_Y + 2: subtle deeper wave shimmer dissolving into ocean depth
-        if (deepW[i3] != L' ' && h > -0.35f) {
-            PutChar(x, WATER_Y + 2, deepW[i3], sub2);
+        // Row WATER_Y + 2: faint shifting under-wave reflections dissolving into the deep
+        float s4 = std::sin(x * 0.11f + time_ * 1.25f - h * 1.1f);
+        if (s4 > 0.52f) {
+            PutChar(x, WATER_Y + 2, (s4 > 0.80f) ? L'~' : L'\x00B7', sub2);
         }
     }
 }
