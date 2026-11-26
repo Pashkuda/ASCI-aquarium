@@ -5,6 +5,7 @@
 
 namespace {
 constexpr float PI = 3.14159265358979323846f;
+constexpr int WATER_Y = 6; // Row of primary ocean waterline (rows 0..5 = open sky for surface boats & periscope)
 
 float Clamp(float v, float lo, float hi) {
     return (v < lo) ? lo : (v > hi ? hi : v);
@@ -112,9 +113,10 @@ float Aquarium::CurrentXAt(float x, float y) const {
 
 float Aquarium::LightIntensityAt(float x, float y) const {
     const int vb = VisibleBottom();
-    if (y < 3.0f || y > static_cast<float>(vb + 2)) return 0.0f;
+    const float startY = static_cast<float>(WATER_Y + 1);
+    if (y < startY || y > static_cast<float>(vb + 2)) return 0.0f;
 
-    float depthFrac = Clamp((y - 3.0f) / static_cast<float>(std::max(10, vb - 4)), 0.0f, 1.0f);
+    float depthFrac = Clamp((y - startY) / static_cast<float>(std::max(10, vb - WATER_Y - 1)), 0.0f, 1.0f);
     float attenuation = std::pow(1.0f - depthFrac * 0.82f, 1.25f);
 
     float total = 0.0f;
@@ -123,7 +125,7 @@ float Aquarium::LightIntensityAt(float x, float y) const {
     for (int r = 0; r < RAY_COUNT; ++r) {
         float anchor = cols_ * (0.08f + 0.21f * r)
                      + std::sin(time_ * (0.18f + 0.03f * r) + r * 1.9f) * 6.5f;
-        float slant = (y - 3.0f) * 0.44f;
+        float slant = (y - startY) * 0.44f;
         float center = anchor + slant;
         float width = 5.5f + depthFrac * 5.2f + (r % 2) * 1.4f;
         float dx = (x - center) / width;
@@ -266,7 +268,7 @@ void Aquarium::Populate() {
     for (int i = 0; i < speckCount; ++i) {
         MarineSpeck ms{};
         ms.x = RandFloat(1.0f, static_cast<float>(cols_ - 2));
-        ms.y = RandFloat(5.0f, static_cast<float>(std::max(8, vb - 5)));
+        ms.y = RandFloat(static_cast<float>(WATER_Y + 3), static_cast<float>(std::max(WATER_Y + 6, vb - 5)));
         ms.vx = RandFloat(-0.35f, 0.35f);
         ms.vy = RandFloat(0.08f, 0.30f);
         ms.phase = RandFloat(0.0f, 2.0f * PI);
@@ -289,7 +291,7 @@ void Aquarium::Populate() {
         Fish f{};
         f.species = sp;
         f.x = RandFloat(8.0f, static_cast<float>(std::max(14, cols_ - 12)));
-        int minY = 6;
+        int minY = WATER_Y + 4;
         int maxY = std::max(minY + 5, vb - 11);
         float bandFrac = (static_cast<float>(depthBand % 3) + RandFloat(0.12f, 0.88f)) / 3.0f;
         depthBand++;
@@ -372,7 +374,7 @@ void Aquarium::Populate() {
 
     // Sleek slow-gliding Sea Turtle in the upper-middle water
     turtle_.x = cols_ * 0.28f;
-    turtle_.y = static_cast<float>(std::max(8, vb / 4));
+    turtle_.y = static_cast<float>(std::max(WATER_Y + 6, vb / 3));
     turtle_.targetY = turtle_.y;
     turtle_.facing = 1;
     turtle_.vx = 2.8f;
@@ -385,7 +387,7 @@ void Aquarium::Populate() {
     for (int i = 0; i < shCount; ++i) {
         Seahorse sh{};
         sh.baseX = cols_ * (i == 0 ? 0.13f : 0.87f);
-        sh.baseY = static_cast<float>(std::max(10, FloorYAt(static_cast<int>(sh.baseX)) - 9 - i * 2));
+        sh.baseY = static_cast<float>(std::max(WATER_Y + 7, FloorYAt(static_cast<int>(sh.baseX)) - 9 - i * 2));
         sh.x = sh.baseX;
         sh.y = sh.baseY;
         sh.phase = RandFloat(0.0f, 2.0f * PI);
@@ -400,7 +402,7 @@ void Aquarium::Populate() {
     for (int i = 0; i < jellyCount; ++i) {
         Jellyfish j{};
         j.x = cols_ * (0.18f + i * 0.31f) + RandFloat(-5.0f, 5.0f);
-        j.y = RandFloat(7.0f, static_cast<float>(std::max(13, vb - 16)));
+        j.y = RandFloat(static_cast<float>(WATER_Y + 5), static_cast<float>(std::max(WATER_Y + 10, vb - 16)));
         j.vx = RandFloat(-0.9f, 0.9f);
         j.vy = 0.0f;
         j.phase = RandFloat(0.0f, 2.0f * PI);
@@ -419,12 +421,12 @@ void Aquarium::Populate() {
     bubbles_.clear();
     for (int i = 0; i < 16; ++i) {
         SpawnBubble(RandFloat(3.0f, static_cast<float>(cols_ - 4)),
-                    RandFloat(6.0f, static_cast<float>(vb - 5)));
+                    RandFloat(static_cast<float>(WATER_Y + 3), static_cast<float>(vb - 5)));
     }
     swirls_.clear();
     for (int i = 0; i < 3; ++i) {
         SpawnSwirl(RandFloat(cols_ * 0.12f, cols_ * 0.88f),
-                   RandFloat(7.5f, static_cast<float>(std::max(12, vb - 11))),
+                   RandFloat(static_cast<float>(WATER_Y + 5), static_cast<float>(std::max(WATER_Y + 9, vb - 11))),
                    RandFloat(2.8f, 4.4f), RandFloat(0.65f, 1.0f));
     }
 
@@ -437,6 +439,13 @@ void Aquarium::Populate() {
     sub_.state = SubmarineState::Inactive;
     sub_.nextSpawnTimer = RandFloat(1200.0f, 2700.0f);
     sub_.periscopeExt = 0.0f;
+
+    // Calm surface boats: one at a time, alternating left->right then right->left
+    boat_.active = false;
+    boat_.nextFacing = (RandInt(0, 1) == 0) ? 1 : -1;
+    boat_.style = RandInt(0, 2);
+    boat_.animPhase = 0.0f;
+    boat_.nextSpawnTimer = RandFloat(6.0f, 12.0f); // First boat appears shortly after startup
 
     foods_.clear();
     ripples_.clear();
@@ -488,14 +497,14 @@ void Aquarium::SummonShark() {
     shark_.active = true;
     shark_.facing = (RandInt(0, 1) == 0) ? 1 : -1;
     shark_.x = (shark_.facing > 0) ? -50.0f : static_cast<float>(cols_ + 6);
-    float minY = 9.0f;
-    float maxY = static_cast<float>(std::max(14, vb - 16));
+    float minY = static_cast<float>(WATER_Y + 7);
+    float maxY = static_cast<float>(std::max(WATER_Y + 11, vb - 16));
     shark_.y = RandFloat(minY, maxY);
     shark_.targetY = Clamp(shark_.y + RandFloat(-3.0f, 3.0f), minY, maxY);
-    shark_.vx = shark_.facing * RandFloat(2.45f, 3.05f);
+    shark_.vx = shark_.facing * RandFloat(5.0f, 6.0f);
     shark_.vy = 0.0f;
     shark_.phase = RandFloat(0.0f, 2.0f * PI);
-    shark_.wakeTimer = 0.4f;
+    shark_.wakeTimer = 0.3f;
 }
 
 void Aquarium::SummonSubmarine() {
@@ -503,11 +512,11 @@ void Aquarium::SummonSubmarine() {
     sub_.state = SubmarineState::CruisingIn;
     sub_.facing = (RandInt(0, 1) == 0) ? 1 : -1;
     sub_.x = (sub_.facing > 0) ? -48.0f : static_cast<float>(cols_ + 5);
-    float minCruise = 11.0f;
-    float maxCruise = static_cast<float>(std::max(14, vb - 16));
+    float minCruise = static_cast<float>(WATER_Y + 9);
+    float maxCruise = static_cast<float>(std::max(WATER_Y + 12, vb - 16));
     sub_.cruiseY = RandFloat(minCruise, maxCruise);
     sub_.y = sub_.cruiseY;
-    sub_.vx = sub_.facing * RandFloat(3.2f, 3.8f);
+    sub_.vx = sub_.facing * RandFloat(3.4f, 4.0f);
     sub_.vy = 0.0f;
     sub_.stopX = RandFloat(cols_ * 0.20f, std::max(cols_ * 0.25f, static_cast<float>(cols_) * 0.52f - 22.0f));
     sub_.propPhase = 0.0f;
@@ -556,14 +565,14 @@ void Aquarium::OnMouseMove(float col, float row, bool active) {
     mouseY_ = row;
 
     int vb = VisibleBottom();
-    if (row < 7.0f && mouseSpeed_ > 1.2f) {
+    if (std::fabs(row - static_cast<float>(WATER_Y)) < 4.5f && mouseSpeed_ > 1.2f) {
         surfaceDisturbX_ = col;
         surfaceDisturbAmp_ = Clamp(surfaceDisturbAmp_ + mouseSpeed_ * 0.14f, 0.0f, 1.35f);
     }
-    if (mouseSpeed_ > 3.2f && row > 3.0f && row < vb - 3.0f && RandInt(0, 3) == 0) {
+    if (mouseSpeed_ > 3.2f && row > static_cast<float>(WATER_Y + 1) && row < vb - 3.0f && RandInt(0, 3) == 0) {
         SpawnBubble(col + RandFloat(-1.0f, 1.0f), row + RandFloat(-0.5f, 0.5f), RandInt(0, 1));
     }
-    if (mouseSpeed_ > 4.2f && row > 6.0f && row < vb - 7.0f && RandInt(0, 8) == 0) {
+    if (mouseSpeed_ > 4.2f && row > static_cast<float>(WATER_Y + 3) && row < vb - 7.0f && RandInt(0, 8) == 0) {
         SpawnSwirl(col, row, RandFloat(2.4f, 3.6f), 0.95f, Clamp(mouseVx_ * 0.25f, -1.5f, 1.5f));
     }
 }
@@ -571,7 +580,7 @@ void Aquarium::OnMouseMove(float col, float row, bool active) {
 void Aquarium::DropFood(float col, float row, int count) {
     int vb = VisibleBottom();
     float cx = Clamp(col, 2.0f, static_cast<float>(cols_ - 3));
-    float cy = Clamp(row, 3.5f, static_cast<float>(vb - 6));
+    float cy = Clamp(row, static_cast<float>(WATER_Y + 1), static_cast<float>(vb - 6));
 
     Ripple rp{};
     rp.x = cx;
@@ -581,7 +590,7 @@ void Aquarium::DropFood(float col, float row, int count) {
     rp.life = 1.0f;
     ripples_.push_back(rp);
 
-    if (cy < 8.0f) {
+    if (cy < static_cast<float>(WATER_Y + 5)) {
         surfaceDisturbX_ = cx;
         surfaceDisturbAmp_ = 1.15f;
     }
@@ -591,7 +600,7 @@ void Aquarium::DropFood(float col, float row, int count) {
         if (foods_.size() >= 65) foods_.erase(foods_.begin());
         FoodPellet fp{};
         fp.x = Clamp(cx + RandFloat(-3.2f, 3.2f), 2.0f, static_cast<float>(cols_ - 3));
-        fp.y = Clamp(cy + RandFloat(-0.8f, 0.8f), 3.5f, static_cast<float>(vb - 5));
+        fp.y = Clamp(cy + RandFloat(-0.8f, 0.8f), static_cast<float>(WATER_Y + 1), static_cast<float>(vb - 5));
         fp.vx = RandFloat(-0.8f, 0.8f);
         fp.vy = RandFloat(1.6f, 2.9f);
         fp.phase = RandFloat(0.0f, 2.0f * PI);
@@ -607,7 +616,7 @@ void Aquarium::DropFood(float col, float row, int count) {
 
 void Aquarium::DropFoodFromSurface(int count) {
     float cx = RandFloat(cols_ * 0.2f, cols_ * 0.8f);
-    DropFood(cx, 4.0f, count);
+    DropFood(cx, static_cast<float>(WATER_Y + 1.5f), count);
 }
 
 void Aquarium::Update(float dt) {
@@ -623,6 +632,7 @@ void Aquarium::Update(float dt) {
     UpdateFood(dt);
     UpdateShark(dt);
     UpdateSubmarine(dt);
+    UpdateBoat(dt);
     UpdateFish(dt);
     UpdateTurtle(dt);
     UpdateSeahorses(dt);
@@ -665,7 +675,7 @@ void Aquarium::UpdateSwirls(float dt) {
     // Maintain 3..5 gentle organic underwater swirl eddies
     if (swirls_.size() < 4 && RandInt(0, 110) == 0) {
         SpawnSwirl(RandFloat(cols_ * 0.08f, cols_ * 0.92f),
-                   RandFloat(6.5f, static_cast<float>(std::max(12, vb - 11))),
+                   RandFloat(static_cast<float>(WATER_Y + 4), static_cast<float>(std::max(WATER_Y + 8, vb - 11))),
                    RandFloat(2.5f, 4.4f), RandFloat(0.60f, 1.05f));
     }
 
@@ -684,8 +694,8 @@ void Aquarium::UpdateSwirls(float dt) {
         // Slight expansion as eddy dissipates naturally
         it->radius = std::min(5.2f, it->radius + dt * 0.07f);
 
-        float maxY = static_cast<float>(std::max(11, vb - 9));
-        it->y = Clamp(it->y, 6.0f, maxY);
+        float maxY = static_cast<float>(std::max(WATER_Y + 7, vb - 9));
+        it->y = Clamp(it->y, static_cast<float>(WATER_Y + 3.5f), maxY);
         if (it->x < -6.0f || it->x > cols_ + 6.0f) {
             it = swirls_.erase(it);
         } else {
@@ -699,7 +709,6 @@ void Aquarium::UpdateShark(float dt) {
     if (!shark_.active) {
         shark_.nextSpawnTimer -= dt;
         if (shark_.nextSpawnTimer <= 0.0f) {
-            // Avoid overlapping directly with an active submarine
             if (sub_.state != SubmarineState::Inactive) {
                 shark_.nextSpawnTimer = 20.0f;
                 return;
@@ -709,37 +718,39 @@ void Aquarium::UpdateShark(float dt) {
         return;
     }
 
-    // Unhurried, powerful, majestic cruising motion
-    shark_.phase += dt * 1.45f;
-    float tailPulse = 0.88f + 0.22f * std::sin(shark_.phase);
-    float cruiseSpeed = 2.65f * tailPulse;
+    // Swift, sleek, powerful cruising motion (~2x faster with lively sweeping tail!)
+    shark_.phase += dt * 2.55f;
+    float tailPulse = 0.88f + 0.24f * std::sin(shark_.phase);
+    float cruiseSpeed = 5.5f * tailPulse;
     float targetVx = cruiseSpeed * shark_.facing + CurrentXAt(shark_.x + 22.0f, shark_.y) * 0.2f;
-    float targetVy = Clamp((shark_.targetY - shark_.y) * 0.22f, -0.65f, 0.65f)
-                   + std::sin(shark_.phase * 0.35f) * 0.22f;
+    float targetVy = Clamp((shark_.targetY - shark_.y) * 0.30f, -1.0f, 1.0f)
+                   + std::sin(shark_.phase * 0.35f) * 0.32f;
 
-    if (RandInt(0, 320) == 0) {
-        shark_.targetY = RandFloat(9.0f, static_cast<float>(std::max(14, vb - 16)));
+    if (RandInt(0, 260) == 0) {
+        shark_.targetY = RandFloat(static_cast<float>(WATER_Y + 7),
+                                   static_cast<float>(std::max(WATER_Y + 11, vb - 16)));
     }
 
-    shark_.vx += (targetVx - shark_.vx) * std::min(1.0f, dt * 1.2f);
-    shark_.vy += (targetVy - shark_.vy) * std::min(1.0f, dt * 1.2f);
+    shark_.vx += (targetVx - shark_.vx) * std::min(1.0f, dt * 1.8f);
+    shark_.vy += (targetVy - shark_.vy) * std::min(1.0f, dt * 1.8f);
     shark_.x += shark_.vx * dt;
     shark_.y += shark_.vy * dt;
-    shark_.y = Clamp(shark_.y, 8.5f, static_cast<float>(std::max(13, vb - 15)));
+    shark_.y = Clamp(shark_.y, static_cast<float>(WATER_Y + 6.5f),
+                     static_cast<float>(std::max(WATER_Y + 10, vb - 15)));
 
-    // Subtle swirling wake eddies & trailing bubbles behind the sweeping tail fin
+    // Energetic swirling wake eddies & trailing bubbles behind the sweeping tail fin
     shark_.wakeTimer -= dt;
     float tailX = (shark_.facing > 0) ? (shark_.x + 2.0f) : (shark_.x + 44.0f);
     float tailY = shark_.y + 1.5f;
     if (shark_.wakeTimer <= 0.0f) {
-        shark_.wakeTimer = RandFloat(2.4f, 4.2f);
+        shark_.wakeTimer = RandFloat(1.4f, 2.5f);
         if (tailX > 2.0f && tailX < cols_ - 2.0f) {
             SpawnSwirl(tailX, tailY + RandFloat(-1.2f, 1.2f), RandFloat(2.6f, 3.8f),
-                       0.95f, -shark_.facing * 0.7f);
+                       1.05f, -shark_.facing * 0.9f);
         }
     }
-    if (RandInt(0, 95) == 0 && tailX > 1.0f && tailX < cols_ - 1.0f) {
-        SpawnBubble(tailX + RandFloat(-1.5f, 1.5f), tailY + RandFloat(-1.0f, 1.0f), RandInt(0, 1));
+    if (RandInt(0, 48) == 0 && tailX > 1.0f && tailX < cols_ - 1.0f) {
+        SpawnBubble(tailX + RandFloat(-1.5f, 1.5f), tailY + RandFloat(-1.0f, 1.0f), RandInt(0, 2));
     }
 
     // Finish crossing -> schedule next random visit in 30 to 60 minutes (1800..3600 seconds)
@@ -747,6 +758,43 @@ void Aquarium::UpdateShark(float dt) {
         (shark_.facing < 0 && shark_.x < -56.0f)) {
         shark_.active = false;
         shark_.nextSpawnTimer = RandFloat(1800.0f, 3600.0f);
+    }
+}
+
+void Aquarium::UpdateBoat(float dt) {
+    if (!boat_.active) {
+        boat_.nextSpawnTimer -= dt;
+        if (boat_.nextSpawnTimer <= 0.0f) {
+            // Politely wait if the submarine is currently surfaced near the waves
+            if (sub_.state != SubmarineState::Inactive && sub_.y <= static_cast<float>(WATER_Y + 4)) {
+                boat_.nextSpawnTimer = 5.0f;
+                return;
+            }
+            boat_.active = true;
+            boat_.facing = boat_.nextFacing;
+            boat_.nextFacing = -boat_.nextFacing; // Alternate direction every trip!
+            boat_.style = (boat_.style + 1) % 3;
+            boat_.x = (boat_.facing > 0) ? -32.0f : static_cast<float>(cols_ + 4);
+            boat_.vx = boat_.facing * RandFloat(2.6f, 3.4f);
+            boat_.animPhase = 0.0f;
+        }
+        return;
+    }
+
+    boat_.animPhase += dt * 2.8f;
+    boat_.x += boat_.vx * dt;
+
+    // Gentle bow wave disturbance as the boat cuts through the water
+    float bowX = (boat_.facing > 0) ? (boat_.x + 22.0f) : (boat_.x + 2.0f);
+    if (bowX > 2.0f && bowX < cols_ - 2.0f && RandInt(0, 28) == 0) {
+        surfaceDisturbX_ = bowX;
+        surfaceDisturbAmp_ = std::max(surfaceDisturbAmp_, 0.42f);
+    }
+
+    if ((boat_.facing > 0 && boat_.x > cols_ + 10.0f) ||
+        (boat_.facing < 0 && boat_.x < -36.0f)) {
+        boat_.active = false;
+        boat_.nextSpawnTimer = RandFloat(45.0f, 90.0f); // Quiet interval before next boat from opposite side
     }
 }
 
@@ -810,14 +858,15 @@ void Aquarium::UpdateSubmarine(float dt) {
                 SpawnBubble(sub_.x + RandFloat(6.0f, 38.0f), sub_.y + 2.0f, RandInt(0, 2));
             }
 
-            if (sub_.y <= 2.15f) {
-                sub_.y = 2.0f;
+            const float surfaceTargetY = static_cast<float>(WATER_Y - 1);
+            if (sub_.y <= surfaceTargetY + 0.15f) {
+                sub_.y = surfaceTargetY;
                 sub_.vy = 0.0f;
                 sub_.state = SubmarineState::PeriscopeUp;
                 sub_.stateTimer = 0.0f;
                 surfaceDisturbX_ = centerX;
                 surfaceDisturbAmp_ = 1.35f;
-                Ripple rp{ centerX, 3.5f, 2.0f, 12.0f, 1.0f };
+                Ripple rp{ centerX, static_cast<float>(WATER_Y + 1), 2.0f, 12.0f, 1.0f };
                 ripples_.push_back(rp);
             }
             break;
@@ -826,7 +875,7 @@ void Aquarium::UpdateSubmarine(float dt) {
         case SubmarineState::PeriscopeUp: {
             sub_.vx *= std::exp(-dt * 2.5f);
             sub_.x += sub_.vx * dt;
-            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.16f;
+            sub_.y = static_cast<float>(WATER_Y - 1) + SurfaceWaveAt(centerX) * 0.16f;
             sub_.periscopeExt = std::min(1.0f, sub_.periscopeExt + dt * 0.85f);
             sub_.lookDir = sub_.facing;
 
@@ -840,7 +889,7 @@ void Aquarium::UpdateSubmarine(float dt) {
         case SubmarineState::LookingAround: {
             sub_.vx *= std::exp(-dt * 3.0f);
             sub_.x += sub_.vx * dt;
-            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.16f;
+            sub_.y = static_cast<float>(WATER_Y - 1) + SurfaceWaveAt(centerX) * 0.16f;
             sub_.stateTimer += dt;
 
             if (sub_.stateTimer < 1.3f) {
@@ -868,14 +917,14 @@ void Aquarium::UpdateSubmarine(float dt) {
         }
 
         case SubmarineState::PeriscopeDown: {
-            sub_.y = 2.0f + SurfaceWaveAt(centerX) * 0.16f;
+            sub_.y = static_cast<float>(WATER_Y - 1) + SurfaceWaveAt(centerX) * 0.16f;
             sub_.periscopeExt = std::max(0.0f, sub_.periscopeExt - dt * 0.95f);
 
             if (sub_.periscopeExt <= 0.0f) {
                 sub_.state = SubmarineState::Diving;
                 sub_.stateTimer = 0.0f;
                 for (int i = 0; i < 9; ++i) {
-                    SpawnBubble(sub_.x + RandFloat(6.0f, 38.0f), 3.0f, RandInt(0, 2));
+                    SpawnBubble(sub_.x + RandFloat(6.0f, 38.0f), static_cast<float>(WATER_Y + 1), RandInt(0, 2));
                 }
                 surfaceDisturbX_ = centerX;
                 surfaceDisturbAmp_ = 1.2f;
@@ -947,8 +996,8 @@ void Aquarium::UpdateMarineSnow(float dt) {
         else if (ms.x > cols_ - 2.0f) ms.x = 1.0f;
 
         int fy = FloorYAt(static_cast<int>(ms.x));
-        if (ms.y >= fy - 1.5f || ms.y < 4.5f) {
-            ms.y = RandFloat(5.0f, 9.0f);
+        if (ms.y >= fy - 1.5f || ms.y < static_cast<float>(WATER_Y + 2.5f)) {
+            ms.y = RandFloat(static_cast<float>(WATER_Y + 3), static_cast<float>(WATER_Y + 7));
             ms.x = RandFloat(2.0f, static_cast<float>(cols_ - 3));
         }
         (void)vb;
@@ -981,11 +1030,12 @@ void Aquarium::UpdateFood(float dt) {
 }
 
 void Aquarium::UpdateFish(float dt) {
-    const float topBound = 5.2f;
+    const float topBound = static_cast<float>(WATER_Y + 3.2f);
     const int vb = VisibleBottom();
 
     // Shared gentle wandering depth for minnow shoals
-    float shoalAnchorY = 9.0f + (std::sin(time_ * 0.19f) * 0.5f + 0.5f) * static_cast<float>(std::max(6, vb - 20));
+    float shoalAnchorY = static_cast<float>(WATER_Y + 6)
+                       + (std::sin(time_ * 0.19f) * 0.5f + 0.5f) * static_cast<float>(std::max(6, vb - WATER_Y - 18));
 
     for (size_t i = 0; i < fishes_.size(); ++i) {
         auto& f = fishes_[i];
@@ -1088,11 +1138,11 @@ void Aquarium::UpdateFish(float dt) {
                     f.pauseTimer = RandFloat(1.0f, 2.6f);
                 }
 
-                int maxY = std::max(10, vb - 11);
+                int maxY = std::max(WATER_Y + 8, vb - 11);
                 if (f.species == FishSpecies::Clownfish) {
-                    f.swimTargetY = Clamp(f.homeY + RandFloat(-5.5f, 2.5f), 6.5f, static_cast<float>(maxY));
+                    f.swimTargetY = Clamp(f.homeY + RandFloat(-5.5f, 2.5f), static_cast<float>(WATER_Y + 4.5f), static_cast<float>(maxY));
                 } else {
-                    f.swimTargetY = RandFloat(6.0f, static_cast<float>(maxY));
+                    f.swimTargetY = RandFloat(static_cast<float>(WATER_Y + 4.0f), static_cast<float>(maxY));
                 }
             }
 
@@ -1309,12 +1359,12 @@ void Aquarium::UpdateFish(float dt) {
             f.x = static_cast<float>(cols_ + 12);
             f.desiredFacing = -1;
             f.facing = -1;
-            f.swimTargetY = RandFloat(6.0f, static_cast<float>(std::max(10, vb - 11)));
+            f.swimTargetY = RandFloat(static_cast<float>(WATER_Y + 4), static_cast<float>(std::max(WATER_Y + 8, vb - 11)));
         } else if (f.x > cols_ + 16.0f) {
             f.x = -12.0f;
             f.desiredFacing = 1;
             f.facing = 1;
-            f.swimTargetY = RandFloat(6.0f, static_cast<float>(std::max(10, vb - 11)));
+            f.swimTargetY = RandFloat(static_cast<float>(WATER_Y + 4), static_cast<float>(std::max(WATER_Y + 8, vb - 11)));
         }
 
         float bottomBound = FloorHeightFAt(f.x) - 3.6f;
@@ -1347,7 +1397,7 @@ void Aquarium::UpdateTurtle(float dt) {
                    - stroke * 0.42f + 0.18f;
 
     if (RandInt(0, 260) == 0) {
-        turtle_.targetY = RandFloat(7.0f, static_cast<float>(std::max(12, vb / 2)));
+        turtle_.targetY = RandFloat(static_cast<float>(WATER_Y + 5), static_cast<float>(std::max(WATER_Y + 9, vb / 2)));
     }
 
     if (mouseActive_) {
@@ -1368,15 +1418,15 @@ void Aquarium::UpdateTurtle(float dt) {
     if (turtle_.x > cols_ + 18.0f) {
         turtle_.facing = -1;
         turtle_.vx = -2.4f;
-        turtle_.y = RandFloat(7.0f, static_cast<float>(std::max(11, vb / 2)));
+        turtle_.y = RandFloat(static_cast<float>(WATER_Y + 5), static_cast<float>(std::max(WATER_Y + 9, vb / 2)));
         turtle_.targetY = turtle_.y;
     } else if (turtle_.x < -20.0f) {
         turtle_.facing = 1;
         turtle_.vx = 2.4f;
-        turtle_.y = RandFloat(7.0f, static_cast<float>(std::max(11, vb / 2)));
+        turtle_.y = RandFloat(static_cast<float>(WATER_Y + 5), static_cast<float>(std::max(WATER_Y + 9, vb / 2)));
         turtle_.targetY = turtle_.y;
     }
-    turtle_.y = Clamp(turtle_.y, 6.5f, static_cast<float>(std::max(11, vb - 13)));
+    turtle_.y = Clamp(turtle_.y, static_cast<float>(WATER_Y + 4.5f), static_cast<float>(std::max(WATER_Y + 9, vb - 13)));
 
     if (RandInt(0, 380) == 0) {
         SpawnBubble(turtle_.x + (turtle_.facing > 0 ? 11.0f : 1.0f), turtle_.y, RandInt(0, 1));
@@ -1437,8 +1487,8 @@ void Aquarium::UpdateJellyfish(float dt) {
         if (j.x < 5.0f) { j.x = 5.0f; j.vx = std::fabs(j.vx); }
         if (j.x > cols_ - 13.0f) { j.x = static_cast<float>(cols_ - 13); j.vx = -std::fabs(j.vx); }
 
-        float maxY = static_cast<float>(std::max(12, vb - 13));
-        if (j.y < 5.5f) { j.y = 5.5f; j.vy = 0.75f; }
+        float maxY = static_cast<float>(std::max(WATER_Y + 9, vb - 13));
+        if (j.y < static_cast<float>(WATER_Y + 3.5f)) { j.y = static_cast<float>(WATER_Y + 3.5f); j.vy = 0.75f; }
         if (j.y > maxY) { j.y = maxY; j.vy = -1.6f; }
     }
 }
@@ -1538,7 +1588,7 @@ void Aquarium::UpdateBubbles(float dt) {
             it->growTimer = RandFloat(2.5f, 4.5f);
         }
 
-        float surfaceY = 2.6f - SurfaceWaveAt(it->x) * 0.45f;
+        float surfaceY = static_cast<float>(WATER_Y) + 0.4f - SurfaceWaveAt(it->x) * 0.45f;
         if (it->y <= surfaceY) {
             it->y = surfaceY;
             it->popping = true;
@@ -1635,10 +1685,9 @@ void Aquarium::DrawLightRays() {
     const int vb = VisibleBottom();
     const COLORREF rayBright = LerpColor(t.lightRay, t.waterSurface, 0.28f);
 
-    for (int y = 4; y < vb - 2; ++y) {
+    for (int y = WATER_Y + 2; y < vb - 2; ++y) {
         COLORREF bg = BgColorAtRow(y);
         for (int x = 0; x < cols_; ++x) {
-            // Subtle organic spacing so rays feel airy & silky rather than solid blocks
             if (((x + y) & 1) != 0) continue;
             float intensity = LightIntensityAt(static_cast<float>(x), static_cast<float>(y));
             if (intensity < 0.22f) continue;
@@ -1660,7 +1709,7 @@ void Aquarium::DrawMarineSnow() {
     for (const auto& ms : specks_) {
         int ix = static_cast<int>(std::round(ms.x));
         int iy = static_cast<int>(std::round(ms.y));
-        if (iy < 5 || iy >= FloorYAt(ix) - 1) continue;
+        if (iy < WATER_Y + 3 || iy >= FloorYAt(ix) - 1) continue;
         float glow = 0.22f + 0.14f * std::sin(time_ * 1.4f + ms.phase);
         COLORREF col = LerpColor(BgColorAtRow(iy), t.waterSurface, glow);
         PutChar(ix, iy, ms.ch, col);
@@ -1678,12 +1727,11 @@ void Aquarium::DrawSwirls() {
         float dir = (sw.spinSpeed >= 0.0f) ? 1.0f : -1.0f;
         int cx = static_cast<int>(std::round(sw.x));
         int cy = static_cast<int>(std::round(sw.y));
-        if (cy >= 5 && cy < FloorYAt(cx) - 1 && lifeFade * sw.strength > 0.45f) {
+        if (cy >= WATER_Y + 3 && cy < FloorYAt(cx) - 1 && lifeFade * sw.strength > 0.45f) {
             COLORREF coreCol = LerpColor(BgColorAtRow(cy), t.waterSurface, 0.36f * lifeFade * sw.strength);
             PutChar(cx, cy, (std::sin(sw.angle * 1.5f) > 0.0f) ? L'\x00B0' : L'@', coreCol);
         }
 
-        // Draw two graceful spiral vortex arms using orientation-matched ASCII curves
         constexpr int STEPS = 11;
         for (int arm = 0; arm < 2; ++arm) {
             float baseAng = sw.angle + arm * PI;
@@ -1695,9 +1743,8 @@ void Aquarium::DrawSwirls() {
 
                 int px = static_cast<int>(std::round(sw.x + std::cos(theta) * rx));
                 int py = static_cast<int>(std::round(sw.y + std::sin(theta) * ry));
-                if (py < 5 || py >= FloorYAt(px) - 1) continue;
+                if (py < WATER_Y + 3 || py >= FloorYAt(px) - 1) continue;
 
-                // Tangent direction along spiral determines curved glyph
                 float tangX = -std::sin(theta) * dir * 1.55f;
                 float tangY =  std::cos(theta) * dir * 0.62f;
                 float ratio = std::fabs(tangY) / (std::fabs(tangX) + 0.01f);
@@ -1723,9 +1770,155 @@ void Aquarium::DrawSwirls() {
     }
 }
 
+void Aquarium::DrawBoat() {
+    if (!boat_.active) return;
+    const Theme& t = CurrentTheme();
+    int ix = static_cast<int>(std::round(boat_.x));
+    bool flagFlip = (static_cast<int>(boat_.animPhase) % 2 == 0);
+    float centerX = boat_.x + 12.0f;
+    // Gentle bobbing on the surface waves (hull bottom sits cleanly in WATER_Y)
+    int bob = (SurfaceWaveAt(centerX) > 0.52f) ? -1 : 0;
+
+    COLORREF hullCol  = t.chestWood;
+    COLORREF sailCol  = t.waterFoam;
+    COLORREF mastCol  = t.sand;
+    COLORREF flagCol  = t.coral1;
+    COLORREF lightCol = t.food;
+
+    int hullLen = 23;
+    if (boat_.style == 0) {
+        // Classic Graceful Sailboat (6 rows x 23 cols)
+        int topY = (WATER_Y - 5) + bob;
+        if (boat_.facing >= 0) {
+            const wchar_t* spr[6] = {
+                flagFlip ? L"           |>          " : L"           |~          ",
+                L"          /| \\         ",
+                L"         / |  \\        ",
+                L"        /  |   \\       ",
+                L"  \\____/___|____\\____/ ",
+                L"   `----------------'  "
+            };
+            const char* msk[6] = {
+                "           34          ",
+                "          2302         ",
+                "         203002        ",
+                "        20030002       ",
+                "  11111222232222211111 ",
+                "   111111111111111111  "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 6, hullCol, sailCol, mastCol, flagCol);
+        } else {
+            const wchar_t* spr[6] = {
+                flagFlip ? L"          <|           " : L"          ~|           ",
+                L"         / |\\          ",
+                L"        /  | \\         ",
+                L"       /   |  \\        ",
+                L" \\____/____|___\\____/  ",
+                L"  `----------------'   "
+            };
+            const char* msk[6] = {
+                "          43           ",
+                "         2032          ",
+                "        200302         ",
+                "       20003002        ",
+                " 11111222223222211111  ",
+                "  111111111111111111   "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 6, hullCol, sailCol, mastCol, flagCol);
+        }
+    } else if (boat_.style == 1) {
+        // Cozy Fishing Trawler / Cutter with puffing chimney smoke & warm lit cabin (5 rows x 24 cols)
+        hullLen = 24;
+        int topY = (WATER_Y - 4) + bob;
+        if (boat_.facing >= 0) {
+            const wchar_t* spr[5] = {
+                flagFlip ? L"       \x00B0  o             " : L"      \x00B7 \x00B0               ",
+                L"          ||  .---.     ",
+                L"         _||__|o o|_    ",
+                L"   \\____/___________\\__/",
+                L"    `-----------------' "
+            };
+            const char* msk[5] = {
+                "       2  2             ",
+                "          33  33333     ",
+                "         33333340433    ",
+                "   111111111111111111111",
+                "    1111111111111111111 "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 5, hullCol, t.bubble, t.rockLight, lightCol);
+        } else {
+            const wchar_t* spr[5] = {
+                flagFlip ? L"             o  \x00B0       " : L"               \x00B0 \x00B7      ",
+                L"     .---.  ||          ",
+                L"    _|o o|__||_         ",
+                L"\\__/___________\\____/   ",
+                L" `-----------------'    "
+            };
+            const char* msk[5] = {
+                "             2  2       ",
+                "     33333  33          ",
+                "    33404333333         ",
+                "111111111111111111111   ",
+                " 1111111111111111111    "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 5, hullCol, t.bubble, t.rockLight, lightCol);
+        }
+    } else {
+        // Classic Two-Masted Schooner (6 rows x 28 cols)
+        hullLen = 28;
+        int topY = (WATER_Y - 5) + bob;
+        if (boat_.facing >= 0) {
+            const wchar_t* spr[6] = {
+                flagFlip ? L"        |>       |>         " : L"        |~       |~         ",
+                L"       /| \\     /| \\        ",
+                L"      / |  \\   / |  \\       ",
+                L"     /__|___\\ /__|___\\      ",
+                L" \\__/________|________\\__/  ",
+                L"  `---------------------'   "
+            };
+            const char* msk[6] = {
+                "        34       34         ",
+                "       2302     2302        ",
+                "      203002   203002       ",
+                "     22232222 22232222      ",
+                " 1111111111113111111111111  ",
+                "  11111111111111111111111   "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 6, hullCol, sailCol, mastCol, flagCol);
+        } else {
+            const wchar_t* spr[6] = {
+                flagFlip ? L"         <|       <|        " : L"         ~|       ~|        ",
+                L"        / |\\     / |\\       ",
+                L"       /  | \\   /  | \\      ",
+                L"      /___|__\\ /___|__\\     ",
+                L"  \\__/________|________\\__/ ",
+                L"   `---------------------'  "
+            };
+            const char* msk[6] = {
+                "         43       43        ",
+                "        2032     2032       ",
+                "       200302   200302      ",
+                "      22223222 22223222     ",
+                "  1111111111113111111111111 ",
+                "   11111111111111111111111  "
+            };
+            PutMaskedSprite(ix, topY, spr, msk, 6, hullCol, sailCol, mastCol, flagCol);
+        }
+    }
+
+    // Crisp trailing wake foam behind the stern along the waterline
+    int sternX = (boat_.facing >= 0) ? (ix - 1) : (ix + hullLen);
+    int dir = -boat_.facing;
+    const wchar_t wakeCh[5] = { L'\x2248', L'~', L'~', L'-', L'\x00B7' };
+    for (int k = 0; k < 5; ++k) {
+        COLORREF wCol = LerpColor(t.waterSurface, t.waterFoam, 1.0f - k * 0.2f);
+        PutChar(sternX + dir * (k + 1), WATER_Y, wakeCh[k], wCol);
+    }
+}
+
 void Aquarium::DrawSurface() {
     const Theme& t = CurrentTheme();
-    const COLORREF bgTop = BgColorAtRow(2);
+    const COLORREF bgTop = BgColorAtRow(WATER_Y);
     const COLORREF sub1 = LerpColor(bgTop, t.waterSurface, 0.58f);
     const COLORREF sub2 = LerpColor(bgTop, t.waterSurface, 0.28f);
 
@@ -1736,18 +1929,18 @@ void Aquarium::DrawSurface() {
         float slope = hR - hL;
         bool isPeak = (h >= hL && h >= hR && h > 0.50f);
 
-        // Row 1: crisp curling ocean wave-crest spirals (хвилі-завихри: .-/~@~ )
+        // Row WATER_Y - 1: crisp curling ocean wave-crest spirals (хвилі-завихри: /~@~° )
         if (isPeak) {
-            PutChar(x, 1, (h > 0.74f) ? L'@' : L'c', t.waterFoam);
-            if (x > 0) PutChar(x - 1, 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.80f));
-            if (x > 1) PutChar(x - 2, 1, L'/', LerpColor(t.waterSurface, t.waterFoam, 0.55f));
-            if (x + 1 < cols_) PutChar(x + 1, 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.62f));
-            if (x + 2 < cols_) PutChar(x + 2, 1, L'\x00B0', LerpColor(bgTop, t.waterFoam, 0.45f));
+            PutChar(x, WATER_Y - 1, (h > 0.74f) ? L'@' : L'c', t.waterFoam);
+            if (x > 0) PutChar(x - 1, WATER_Y - 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.80f));
+            if (x > 1) PutChar(x - 2, WATER_Y - 1, L'/', LerpColor(t.waterSurface, t.waterFoam, 0.55f));
+            if (x + 1 < cols_) PutChar(x + 1, WATER_Y - 1, L'~', LerpColor(t.waterSurface, t.waterFoam, 0.62f));
+            if (x + 2 < cols_) PutChar(x + 2, WATER_Y - 1, L'\x00B0', LerpColor(bgTop, t.waterFoam, 0.45f));
         } else if (h > 0.42f && ((x + static_cast<int>(time_ * 4.5f)) % 8 == 0)) {
-            PutChar(x, 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.45f));
+            PutChar(x, WATER_Y - 1, L'\x00B7', LerpColor(bgTop, t.waterFoam, 0.45f));
         }
 
-        // Row 2: smooth continuous curling waterline
+        // Row WATER_Y: smooth continuous curling waterline
         wchar_t waveCh = L'~';
         if (isPeak && h > 0.62f)          waveCh = L')';
         else if (h > 0.52f)               waveCh = L'\x2248';
@@ -1758,35 +1951,35 @@ void Aquarium::DrawSurface() {
 
         float crestBlend = Clamp((h + 0.55f) * 0.65f, 0.0f, 1.0f);
         COLORREF waveCol = LerpColor(LerpColor(bgTop, t.waterSurface, 0.74f), t.waterFoam, crestBlend * 0.72f);
-        PutChar(x, 2, waveCh, waveCol);
+        PutChar(x, WATER_Y, waveCh, waveCol);
 
-        // Row 3: gentle undulating subsurface curls (isolated crest curls, never long blocks of '(')
+        // Row WATER_Y + 1: gentle undulating subsurface curls
         float s3  = std::sin(x * 0.16f - time_ * 1.95f + h * 1.6f);
         float s3L = std::sin((x - 1) * 0.16f - time_ * 1.95f + hL * 1.6f);
         float s3R = std::sin((x + 1) * 0.16f - time_ * 1.95f + hR * 1.6f);
         bool s3Peak = (s3 >= s3L && s3 >= s3R && s3 > 0.72f);
 
         if (s3Peak) {
-            PutChar(x, 3, L'@', sub1);
-            if (x > 0) PutChar(x - 1, 3, L'(', sub1);
-            if (x + 1 < cols_) PutChar(x + 1, 3, L'~', sub1);
+            PutChar(x, WATER_Y + 1, L'@', sub1);
+            if (x > 0) PutChar(x - 1, WATER_Y + 1, L'(', sub1);
+            if (x + 1 < cols_) PutChar(x + 1, WATER_Y + 1, L'~', sub1);
         } else if (s3 > -0.10f) {
             wchar_t ch3 = (s3 > 0.55f) ? L'\x2248' : ((s3 > 0.20f) ? L'~' : L'-');
             COLORREF col3 = LerpColor(sub2, sub1, Clamp((s3 + 0.10f) * 0.85f, 0.0f, 1.0f));
-            PutChar(x, 3, ch3, col3);
+            PutChar(x, WATER_Y + 1, ch3, col3);
         } else if (h < -0.25f) {
-            PutChar(x, 3, L'\x00B7', sub2);
+            PutChar(x, WATER_Y + 1, L'\x00B7', sub2);
         }
 
-        // Row 4: delicate curling under-wave wisps fading softly into deep water
+        // Row WATER_Y + 2: delicate curling under-wave wisps fading softly into deep water
         float s4  = std::sin(x * 0.14f + time_ * 1.35f - h * 1.1f);
         float s4L = std::sin((x - 1) * 0.14f + time_ * 1.35f - hL * 1.1f);
         float s4R = std::sin((x + 1) * 0.14f + time_ * 1.35f - hR * 1.1f);
         if (s4 >= s4L && s4 >= s4R && s4 > 0.78f) {
-            PutChar(x, 4, L'~', sub2);
-            if (x + 1 < cols_) PutChar(x + 1, 4, L')', sub2);
+            PutChar(x, WATER_Y + 2, L'~', sub2);
+            if (x + 1 < cols_) PutChar(x + 1, WATER_Y + 2, L')', sub2);
         } else if (s4 > 0.52f) {
-            PutChar(x, 4, (s4 > 0.74f) ? L'~' : L'\x00B7', sub2);
+            PutChar(x, WATER_Y + 2, (s4 > 0.74f) ? L'~' : L'\x00B7', sub2);
         }
     }
 }
@@ -2240,14 +2433,14 @@ void Aquarium::DrawSubmarine(bool surfaceOverlay) {
 
     const Theme& t = CurrentTheme();
     int ix = static_cast<int>(std::round(sub_.x));
-    int iy = std::max(2, static_cast<int>(std::round(sub_.y)));
+    int iy = std::max(WATER_Y - 1, static_cast<int>(std::round(sub_.y)));
 
     COLORREF hullCol  = LerpColor(t.chestGold, t.sand, 0.28f);
     COLORREF towerCol = LerpColor(t.rockLight, t.chestGold, 0.30f);
     COLORREF trimCol  = t.waterFoam;
     COLORREF glowCol  = t.fishEye;
 
-    bool surfaced = (sub_.y <= 4.2f);
+    bool surfaced = (sub_.y <= static_cast<float>(WATER_Y + 1.5f));
     // When surfaced, render the full vessel cleanly after DrawSurface() so waves never overwrite its deck/portholes
     if (surfaceOverlay != surfaced) return;
 
@@ -2744,5 +2937,6 @@ void Aquarium::Render() {
     DrawRipples();
     DrawSparkles();
     DrawSurface();
+    DrawBoat();          // serene surface boats gliding one at a time, alternating directions
     DrawSubmarine(true); // conning tower & periscope rising above the waves!
 }

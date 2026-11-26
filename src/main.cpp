@@ -413,20 +413,33 @@ void RebuildBackgroundBitmap() {
     if (!g_app.bgDC || g_app.width <= 0 || g_app.height <= 0) return;
 
     const Theme& t = g_app.aquarium.CurrentTheme();
-    int rTop = GetRValue(t.bgTop),    gTop = GetGValue(t.bgTop),    bTop = GetBValue(t.bgTop);
-    int rBot = GetRValue(t.bgBottom), gBot = GetGValue(t.bgBottom), bBot = GetBValue(t.bgBottom);
+    int rTop = GetRValue(t.bgTop),        gTop = GetGValue(t.bgTop),        bTop = GetBValue(t.bgTop);
+    int rBot = GetRValue(t.bgBottom),     gBot = GetGValue(t.bgBottom),     bBot = GetBValue(t.bgBottom);
     int rSur = GetRValue(t.waterSurface), gSur = GetGValue(t.waterSurface), bSur = GetBValue(t.waterSurface);
 
-    // Subtle sunlit surface glow blending smoothly into deep ocean gradient (1px precision)
-    for (int y = 0; y < g_app.height; ++y) {
-        float k = static_cast<float>(y) / static_cast<float>(std::max(1, g_app.height - 1));
-        float curve = std::pow(k, 0.85f);
-        float shallow = std::max(0.0f, 1.0f - k * 5.2f);
-        shallow *= shallow * 0.14f;
+    // Horizon line sits at row 6 (cellH * 6) so surface boats have crisp night-ocean sky above the waves
+    int waterPx = std::max(1, g_app.cellH * 6 + g_app.cellH / 2);
 
-        float rf = rTop + (rBot - rTop) * curve + (rSur - rTop) * shallow;
-        float gf = gTop + (gBot - gTop) * curve + (gSur - gTop) * shallow;
-        float bf = bTop + (bBot - bTop) * curve + (bSur - bTop) * shallow;
+    for (int y = 0; y < g_app.height; ++y) {
+        float rf, gf, bf;
+        if (y < waterPx) {
+            // Subtle calm twilight sky above the waterline
+            float skyK = static_cast<float>(y) / static_cast<float>(waterPx);
+            float horizonGlow = skyK * skyK * 0.08f;
+            rf = rBot * 0.72f + (rTop - rBot * 0.72f) * skyK + (rSur - rTop) * horizonGlow;
+            gf = gBot * 0.72f + (gTop - gBot * 0.72f) * skyK + (gSur - gTop) * horizonGlow;
+            bf = bBot * 0.72f + (bTop - bBot * 0.72f) * skyK + (bSur - bTop) * horizonGlow;
+        } else {
+            // Luminous sunlit shallow water smoothly deepening toward the seabed
+            float k = static_cast<float>(y - waterPx) / static_cast<float>(std::max(1, g_app.height - waterPx));
+            float curve = std::pow(k, 0.85f);
+            float shallow = std::max(0.0f, 1.0f - k * 4.8f);
+            shallow *= shallow * 0.14f;
+
+            rf = rTop + (rBot - rTop) * curve + (rSur - rTop) * shallow;
+            gf = gTop + (gBot - gTop) * curve + (gSur - gTop) * shallow;
+            bf = bTop + (bBot - bTop) * curve + (bSur - bTop) * shallow;
+        }
 
         int r = std::max(0, std::min(255, static_cast<int>(rf)));
         int g = std::max(0, std::min(255, static_cast<int>(gf)));

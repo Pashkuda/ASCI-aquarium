@@ -140,6 +140,17 @@ struct Submarine {
     float nextSpawnTimer = 0.0f; // 1200..2700 seconds (20-45 min)
 };
 
+struct SurfaceBoat {
+    bool active = false;
+    float x = 0.0f;
+    float vx = 0.0f;
+    int facing = 1;           // alternates +1 -> -1 -> +1 ...
+    int nextFacing = 1;
+    int style = 0;            // 0 = sailboat, 1 = trawler, 2 = schooner
+    float animPhase = 0.0f;
+    float nextSpawnTimer = 0.0f;
+};
+
 struct Bubble {
     float x, y;
     float vy;
@@ -262,10 +273,12 @@ private:
     void UpdateSwirls(float dt);
     void UpdateShark(float dt);
     void UpdateSubmarine(float dt);
+    void UpdateBoat(float dt);
 
     void DrawLightRays();
     void DrawMarineSnow();
     void DrawSwirls();
+    void DrawBoat();
     void DrawSurface();
     void DrawDistantSeabed();
     void DrawSeabed();
@@ -314,6 +327,7 @@ private:
     std::vector<WaterSwirl> swirls_;
     Shark shark_{};
     Submarine sub_{};
+    SurfaceBoat boat_{};
     std::vector<Bubble> bubbles_;
     std::vector<FoodPellet> foods_;
     std::vector<Ripple> ripples_;
