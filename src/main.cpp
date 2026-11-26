@@ -36,7 +36,7 @@ constexpr wchar_t REG_RUN_VAL[]     = L"AsciiAquariumWallpaper";
 constexpr UINT WM_TRAYICON       = WM_APP + 10;
 constexpr UINT_PTR TIMER_FRAME   = 1;
 constexpr UINT_PTR TIMER_CHECK   = 2;
-constexpr UINT FRAME_MS          = 42; // ~24 FPS
+constexpr UINT FRAME_MS          = 30; // ~33 FPS for silky smooth waves and swimming
 
 // Clean tray menu command IDs
 constexpr UINT IDM_FEED          = 1001;
@@ -46,6 +46,7 @@ constexpr UINT IDM_PAUSE         = 1004;
 constexpr UINT IDM_AUTOSTART     = 1005;
 constexpr UINT IDM_REATTACH      = 1006;
 constexpr UINT IDM_EXIT          = 1007;
+constexpr UINT IDM_SHARK         = 1008;
 constexpr UINT IDM_THEME_BASE    = 2000;
 
 template <typename T>
@@ -411,16 +412,27 @@ void RebuildBackgroundBitmap() {
     if (!g_app.bgDC || g_app.width <= 0 || g_app.height <= 0) return;
 
     const Theme& t = g_app.aquarium.CurrentTheme();
-    int r1 = GetRValue(t.bgTop),    g1 = GetGValue(t.bgTop),    b1 = GetBValue(t.bgTop);
-    int r2 = GetRValue(t.bgBottom), g2 = GetGValue(t.bgBottom), b2 = GetBValue(t.bgBottom);
+    int rTop = GetRValue(t.bgTop),    gTop = GetGValue(t.bgTop),    bTop = GetBValue(t.bgTop);
+    int rBot = GetRValue(t.bgBottom), gBot = GetGValue(t.bgBottom), bBot = GetBValue(t.bgBottom);
+    int rSur = GetRValue(t.waterSurface), gSur = GetGValue(t.waterSurface), bSur = GetBValue(t.waterSurface);
 
-    for (int y = 0; y < g_app.height; y += 4) {
+    // Subtle sunlit surface glow blending smoothly into deep ocean gradient (1px precision)
+    for (int y = 0; y < g_app.height; ++y) {
         float k = static_cast<float>(y) / static_cast<float>(std::max(1, g_app.height - 1));
-        int r = static_cast<int>(r1 + (r2 - r1) * k);
-        int g = static_cast<int>(g1 + (g2 - g1) * k);
-        int b = static_cast<int>(b1 + (b2 - b1) * k);
+        float curve = std::pow(k, 0.85f);
+        float shallow = std::max(0.0f, 1.0f - k * 5.2f);
+        shallow *= shallow * 0.14f;
+
+        float rf = rTop + (rBot - rTop) * curve + (rSur - rTop) * shallow;
+        float gf = gTop + (gBot - gTop) * curve + (gSur - gTop) * shallow;
+        float bf = bTop + (bBot - bTop) * curve + (bSur - bTop) * shallow;
+
+        int r = std::max(0, std::min(255, static_cast<int>(rf)));
+        int g = std::max(0, std::min(255, static_cast<int>(gf)));
+        int b = std::max(0, std::min(255, static_cast<int>(bf)));
+
         HBRUSH br = CreateSolidBrush(RGB(r, g, b));
-        RECT band{ 0, y, g_app.width, std::min(g_app.height, y + 4) };
+        RECT band{ 0, y, g_app.width, y + 1 };
         FillRect(g_app.bgDC, &band, br);
         DeleteObject(br);
     }
@@ -486,8 +498,8 @@ void InitGraphics(HWND hwnd, int w, int h) {
     g_app.bgBmp = CreateCompatibleBitmap(screenDC, g_app.width, g_app.height);
     g_app.bgOldBmp = static_cast<HBITMAP>(SelectObject(g_app.bgDC, g_app.bgBmp));
 
-    // Slightly refined crisp Consolas font so multi-line detailed ASCII art looks sharp
-    int fontH = std::max(14, std::min(19, g_app.height / 58));
+    // Refined crisp Consolas font for finer, slightly smaller fish and smoother water/seabed detail
+    int fontH = std::max(13, std::min(16, g_app.height / 66));
     g_app.font = CreateFontW(
         -fontH, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -719,6 +731,7 @@ void ShowTrayMenu(HWND trayHwnd) {
     }
 
     AppendMenuW(menu, MF_STRING, IDM_FEED, L"Погодувати рибок");
+    AppendMenuW(menu, MF_STRING, IDM_SHARK, L"Покликати акулу");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(themeMenu), L"Тема оформлення");
     AppendMenuW(menu, MF_STRING | (g_app.mouseInteract ? MF_CHECKED : 0),
@@ -812,6 +825,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 switch (id) {
                     case IDM_FEED:
                         g_app.aquarium.DropFoodFromSurface(14);
+                        break;
+                    case IDM_SHARK:
+                        g_app.aquarium.SummonShark();
                         break;
                     case IDM_MOUSE:
                         g_app.mouseInteract = !g_app.mouseInteract;

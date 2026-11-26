@@ -20,9 +20,9 @@ A lightweight, interactive ASCII-art live desktop wallpaper for **Windows 11 (24
 - **Native Windows 11 24H2 / 25H2 Desktop Embedding:** Renders directly behind desktop icons inside `Progman` using hardware-accelerated **Direct3D 11 + DXGI SwapChain + DirectComposition** (`WS_EX_NOREDIRECTIONBITMAP`) without blocking icons or stealing focus.
 - **Ultra-Lightweight & Game-Friendly:** Single ~300 KB native binary with minimal CPU usage and automatic pause (`SHQueryUserNotificationState` + fullscreen detection) whenever a fullscreen game or video is running.
 - **Rich Animated ASCII Ecosystem:**
-  - Animated water surface waves, diagonal light rays, and rising oxygen bubbles.
-  - Schooling minnows, striped clownfish, tropical fish, curved reef fish, diamond angelfish, a spiny pufferfish (inflates when startled), a gliding sea turtle, bobbing seahorses, and pulsating jellyfish.
-  - Taskbar-aware seabed (`SPI_GETWORKAREA`) with lush swaying kelp, shaded rocks, branching corals, shells, a scuttling 3-row crab, and a sunken treasure chest releasing golden bubbles.
+  - Smooth multi-harmonic curling water surface waves with foam crests, subsurface swirls, rotating underwater vortex eddies that pull bubbles and marine snow, drifting volumetric sunbeams, and subtle marine snow.
+  - Lifelike burst-and-glide fish kinematics with smooth U-turns, 3-layer depth parallax, full Boids schooling minnows, territory-orbiting striped clownfish, classic curved koi/tang & sleek torpedo reef fish, graceful angelfish, spiny pufferfish, a stroke-gliding sea turtle, bobbing seahorses, pulsating jellyfish with trailing tentacles, and a rare unhurried Great Shark that randomly cruises across every 30–60 minutes (parting nearby fish and leaving swirling wake eddies).
+  - Taskbar-aware multi-layered seabed (`SPI_GETWORKAREA`) with smooth sloped dunes, distant reef silhouette, dancing sunlit sand caustics, swaying seagrass & kelp, mossy shaded boulders, staghorn/fan corals, animated swaying sea anemones, shells, a scuttling 3-row crab, and a sunken treasure chest releasing golden bubbles.
 - **Interactive Desktop Physics:**
   - **Mouse Movement:** Fish react and scatter from quick cursor sweeps, pufferfish inflate, the crab raises its claws and sidesteps, seaweed sways with the cursor current, and the treasure chest opens when hovered.
   - **Click to Feed:** A quick left-click on empty desktop drops sinking ASCII food pellets (`•`, `·`, `*`) with a water ripple — nearby fish turn around and swim to eat them.

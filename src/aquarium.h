@@ -25,13 +25,20 @@ struct Fish {
     float vx, vy;
     float baseSpeed;
     int facing;          // +1 right, -1 left
+    int desiredFacing;   // smooth turning target
+    int depthLayer;      // 0 = far, 1 = mid, 2 = near
     int colorIndex;
     int variant;
     float phase;
+    float burstTimer;
+    float burstAmount;
+    float pauseTimer;
     float scaredTimer;
     float hungryCooldown;
     float swimTargetY;
+    float homeX, homeY;
     float turnTimer;
+    float turnCooldown;
 };
 
 struct SeaTurtle {
@@ -39,6 +46,7 @@ struct SeaTurtle {
     float vx, vy;
     int facing;
     float phase;
+    float targetY;
 };
 
 struct Seahorse {
@@ -54,6 +62,7 @@ struct Jellyfish {
     float vx, vy;
     float phase;
     float pulseSpeed;
+    float trailOffset;
 };
 
 struct Seaweed {
@@ -66,10 +75,49 @@ struct Seaweed {
     bool leafy;
 };
 
+struct Seagrass {
+    int x;
+    int height;
+    float phase;
+    bool bright;
+};
+
+struct MarineSpeck {
+    float x, y;
+    float vx, vy;
+    float phase;
+    wchar_t ch;
+};
+
+struct WaterSwirl {
+    float x, y;
+    float vx, vy;
+    float radius;
+    float angle;
+    float spinSpeed;     // +CW or -CCW
+    float age;
+    float maxLife;
+    float strength;
+};
+
+struct Shark {
+    bool active = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float vx = 0.0f;
+    float vy = 0.0f;
+    float targetY = 0.0f;
+    int facing = 1;
+    float phase = 0.0f;
+    float nextSpawnTimer = 0.0f; // 1800..3600 seconds (30-60 min)
+    float wakeTimer = 0.0f;
+};
+
 struct Bubble {
     float x, y;
     float vy;
     float phase;
+    float growTimer;
     int size;
     bool popping;
     float popTimer;
@@ -78,7 +126,7 @@ struct Bubble {
 
 struct FoodPellet {
     float x, y;
-    float vy;
+    float vx, vy;
     float phase;
     float life;
     wchar_t ch;
@@ -100,21 +148,23 @@ struct Sparkle {
 struct Coral {
     int x;
     int height;
-    int style;
+    int style;       // 0 = staghorn, 1 = sea fan, 2 = animated anemone, 3 = tube sponge
     int colorSlot;
+    float phase;
 };
 
 struct Rock {
     int x;
     int width;
     int height;
+    bool mossy;
 };
 
 struct ShellDecor {
     int x;
     int dy;
     wchar_t ch;
-    bool star;
+    int kind;        // 0 = shell, 1 = starfish, 2 = pebble
 };
 
 struct TreasureChest {
@@ -146,6 +196,7 @@ public:
     void OnMouseMove(float col, float row, bool active);
     void DropFood(float col, float row, int count = 6);
     void DropFoodFromSurface(int count = 14);
+    void SummonShark();
 
     int Cols() const { return cols_; }
     int Rows() const { return rows_; }
@@ -158,7 +209,14 @@ private:
     void PutChar(int x, int y, wchar_t ch, COLORREF color);
     void PutString(int x, int y, const wchar_t* str, COLORREF color);
     void PutFishLine(int x, int y, const wchar_t* str, COLORREF bodyCol, COLORREF accentCol, COLORREF eyeCol);
+    void PutMaskedSprite(int x, int y, const wchar_t* const* lines, const char* const* masks, int count,
+                         COLORREF bodyCol, COLORREF finCol, COLORREF accentCol, COLORREF eyeCol);
     int FloorYAt(int x) const;
+    float FloorHeightFAt(float x) const;
+    float SurfaceWaveAt(float x) const;
+    float CurrentXAt(float x, float y) const;
+    float LightIntensityAt(float x, float y) const;
+    COLORREF BgColorAtRow(int y) const;
     int VisibleBottom() const { return std::max(12, rows_ - bottomMarginRows_); }
 
     void UpdateSeaweed(float dt);
@@ -172,16 +230,25 @@ private:
     void UpdateFood(float dt);
     void UpdateRipples(float dt);
     void UpdateSparkles(float dt);
+    void UpdateMarineSnow(float dt);
+    void UpdateSwirls(float dt);
+    void UpdateShark(float dt);
 
     void DrawLightRays();
+    void DrawMarineSnow();
+    void DrawSwirls();
     void DrawSurface();
+    void DrawDistantSeabed();
     void DrawSeabed();
+    void DrawSeagrass();
     void DrawTreasureChest();
     void DrawSeaweed(bool brightLayer);
     void DrawSeahorses();
     void DrawTurtle();
+    void DrawShark();
     void DrawJellyfish();
-    void DrawFish();
+    void DrawFishLayer(int layer);
+    void DrawSingleFish(const Fish& f);
     void DrawCrab();
     void DrawFood();
     void DrawBubbles();
@@ -189,6 +256,8 @@ private:
     void DrawSparkles();
 
     void SpawnBubble(float x, float y, int size = -1, bool golden = false);
+    void SpawnSwirl(float x, float y, float radius = 0.0f, float strength = 1.0f, float vx = 0.0f);
+    void SampleSwirlFlow(float x, float y, float& outVx, float& outVy) const;
 
     float RandFloat(float a, float b);
     int RandInt(int a, int b);
@@ -201,6 +270,8 @@ private:
 
     std::vector<Cell> grid_;
     std::vector<int> floorHeights_;
+    std::vector<float> floorHeightF_;
+    std::vector<float> bgFloorF_;
     std::vector<wchar_t> sandNoise_;
 
     std::vector<Fish> fishes_;
@@ -208,6 +279,10 @@ private:
     std::vector<Seahorse> seahorses_;
     std::vector<Jellyfish> jellies_;
     std::vector<Seaweed> seaweeds_;
+    std::vector<Seagrass> seagrasses_;
+    std::vector<MarineSpeck> specks_;
+    std::vector<WaterSwirl> swirls_;
+    Shark shark_{};
     std::vector<Bubble> bubbles_;
     std::vector<FoodPellet> foods_;
     std::vector<Ripple> ripples_;
@@ -224,6 +299,8 @@ private:
     float mouseVx_ = 0.0f;
     float mouseVy_ = 0.0f;
     float mouseSpeed_ = 0.0f;
+    float surfaceDisturbX_ = -100.0f;
+    float surfaceDisturbAmp_ = 0.0f;
 
     std::mt19937 rng_;
 };
