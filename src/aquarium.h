@@ -144,11 +144,26 @@ struct SurfaceBoat {
     bool active = false;
     float x = 0.0f;
     float vx = 0.0f;
+    float baseVx = 0.0f;
+    float yOffset = 0.0f;     // vertical lift when climbing a big wave (negative = up)
+    float vyOffset = 0.0f;
+    float rockAmp = 0.0f;     // post-wave damped rocking amplitude
+    float rockPhase = 0.0f;
+    int tilt = 0;             // -1 nose down, 0 level, +1 nose up
     int facing = 1;           // alternates +1 -> -1 -> +1 ...
     int nextFacing = 1;
     int style = 0;            // 0 = sailboat, 1 = trawler, 2 = schooner
     float animPhase = 0.0f;
     float nextSpawnTimer = 0.0f;
+};
+
+struct BigWave {
+    bool active = false;
+    float x = 0.0f;
+    float vx = 0.0f;
+    int facing = -1;          // -1 rolls right->left (breaks left), +1 rolls left->right (breaks right)
+    float phase = 0.0f;
+    float nextSpawnTimer = 0.0f; // 180..360 seconds (3-6 min)
 };
 
 struct Bubble {
@@ -236,6 +251,7 @@ public:
     void DropFoodFromSurface(int count = 14);
     void SummonShark();
     void SummonSubmarine();
+    void SummonBigWave();
 
     int Cols() const { return cols_; }
     int Rows() const { return rows_; }
@@ -274,11 +290,13 @@ private:
     void UpdateShark(float dt);
     void UpdateSubmarine(float dt);
     void UpdateBoat(float dt);
+    void UpdateBigWave(float dt);
 
     void DrawLightRays();
     void DrawMarineSnow();
     void DrawSwirls();
     void DrawBoat();
+    void DrawBigWave();
     void DrawSurface();
     void DrawDistantSeabed();
     void DrawSeabed();
@@ -328,6 +346,7 @@ private:
     Shark shark_{};
     Submarine sub_{};
     SurfaceBoat boat_{};
+    BigWave bigWave_{};
     std::vector<Bubble> bubbles_;
     std::vector<FoodPellet> foods_;
     std::vector<Ripple> ripples_;

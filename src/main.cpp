@@ -48,6 +48,7 @@ constexpr UINT IDM_REATTACH      = 1006;
 constexpr UINT IDM_EXIT          = 1007;
 constexpr UINT IDM_SHARK         = 1008;
 constexpr UINT IDM_SUBMARINE     = 1009;
+constexpr UINT IDM_BIGWAVE       = 1010;
 constexpr UINT IDM_THEME_BASE    = 2000;
 
 template <typename T>
@@ -417,8 +418,8 @@ void RebuildBackgroundBitmap() {
     int rBot = GetRValue(t.bgBottom),     gBot = GetGValue(t.bgBottom),     bBot = GetBValue(t.bgBottom);
     int rSur = GetRValue(t.waterSurface), gSur = GetGValue(t.waterSurface), bSur = GetBValue(t.waterSurface);
 
-    // Horizon line sits at row 6 (cellH * 6) so surface boats have crisp night-ocean sky above the waves
-    int waterPx = std::max(1, g_app.cellH * 6 + g_app.cellH / 2);
+    // Horizon line sits at row 8 (cellH * 8) so boats can ride dramatically atop giant waves without clipping
+    int waterPx = std::max(1, g_app.cellH * 8 + g_app.cellH / 2);
 
     for (int y = 0; y < g_app.height; ++y) {
         float rf, gf, bf;
@@ -747,6 +748,7 @@ void ShowTrayMenu(HWND trayHwnd) {
     AppendMenuW(menu, MF_STRING, IDM_FEED, L"Погодувати рибок");
     AppendMenuW(menu, MF_STRING, IDM_SHARK, L"Покликати акулу");
     AppendMenuW(menu, MF_STRING, IDM_SUBMARINE, L"Покликати субмарину");
+    AppendMenuW(menu, MF_STRING, IDM_BIGWAVE, L"Запустити велику хвилю");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(themeMenu), L"Тема оформлення");
     AppendMenuW(menu, MF_STRING | (g_app.mouseInteract ? MF_CHECKED : 0),
@@ -846,6 +848,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                         break;
                     case IDM_SUBMARINE:
                         g_app.aquarium.SummonSubmarine();
+                        break;
+                    case IDM_BIGWAVE:
+                        g_app.aquarium.SummonBigWave();
                         break;
                     case IDM_MOUSE:
                         g_app.mouseInteract = !g_app.mouseInteract;

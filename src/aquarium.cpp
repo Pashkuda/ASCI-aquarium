@@ -5,7 +5,7 @@
 
 namespace {
 constexpr float PI = 3.14159265358979323846f;
-constexpr int WATER_Y = 6; // Row of primary ocean waterline (rows 0..5 = open sky for surface boats & periscope)
+constexpr int WATER_Y = 8; // Row of primary ocean waterline (rows 0..7 = sky for boats, big wave & surfing!)
 
 float Clamp(float v, float lo, float hi) {
     return (v < lo) ? lo : (v > hi ? hi : v);
@@ -445,7 +445,18 @@ void Aquarium::Populate() {
     boat_.nextFacing = (RandInt(0, 1) == 0) ? 1 : -1;
     boat_.style = RandInt(0, 2);
     boat_.animPhase = 0.0f;
+    boat_.yOffset = 0.0f;
+    boat_.vyOffset = 0.0f;
+    boat_.rockAmp = 0.0f;
+    boat_.rockPhase = 0.0f;
+    boat_.tilt = 0;
     boat_.nextSpawnTimer = RandFloat(6.0f, 12.0f); // First boat appears shortly after startup
+
+    // Periodic dramatic Big Breaking Surf Wave (every 3..6 minutes, from either side)
+    bigWave_.active = false;
+    bigWave_.facing = -1;
+    bigWave_.phase = 0.0f;
+    bigWave_.nextSpawnTimer = RandFloat(180.0f, 360.0f);
 
     foods_.clear();
     ripples_.clear();
@@ -523,6 +534,14 @@ void Aquarium::SummonSubmarine() {
     sub_.periscopeExt = 0.0f;
     sub_.stateTimer = 0.0f;
     sub_.lookDir = sub_.facing;
+}
+
+void Aquarium::SummonBigWave() {
+    bigWave_.active = true;
+    bigWave_.facing = (RandInt(0, 1) == 0) ? -1 : 1;
+    bigWave_.x = (bigWave_.facing > 0) ? -36.0f : static_cast<float>(cols_ + 4);
+    bigWave_.vx = bigWave_.facing * RandFloat(10.8f, 13.2f);
+    bigWave_.phase = 0.0f;
 }
 
 void Aquarium::SpawnBubble(float x, float y, int size, bool golden) {
@@ -632,6 +651,7 @@ void Aquarium::Update(float dt) {
     UpdateFood(dt);
     UpdateShark(dt);
     UpdateSubmarine(dt);
+    UpdateBigWave(dt);
     UpdateBoat(dt);
     UpdateFish(dt);
     UpdateTurtle(dt);
@@ -761,6 +781,43 @@ void Aquarium::UpdateShark(float dt) {
     }
 }
 
+void Aquarium::UpdateBigWave(float dt) {
+    if (!bigWave_.active) {
+        bigWave_.nextSpawnTimer -= dt;
+        if (bigWave_.nextSpawnTimer <= 0.0f) {
+            SummonBigWave();
+        }
+        return;
+    }
+
+    bigWave_.phase += dt * 7.5f;
+    bigWave_.x += bigWave_.vx * dt;
+
+    float crestX = bigWave_.x + (bigWave_.facing < 0 ? 12.0f : 22.0f);
+    if (crestX > 2.0f && crestX < cols_ - 2.0f) {
+        surfaceDisturbX_ = crestX;
+        surfaceDisturbAmp_ = 1.45f;
+
+        // Aerated bubbles plunging downward beneath the breaking curl
+        if (RandInt(0, 3) == 0) {
+            SpawnBubble(crestX + RandFloat(-5.0f, 5.0f),
+                        static_cast<float>(WATER_Y) + RandFloat(1.0f, 3.2f),
+                        RandInt(0, 2));
+        }
+        // Occasional rolling underwater wave-eddy spawned beneath the crashing surge
+        if (RandInt(0, 42) == 0) {
+            SpawnSwirl(crestX, static_cast<float>(WATER_Y + 5), RandFloat(2.8f, 4.0f),
+                       1.1f, bigWave_.facing * 1.4f);
+        }
+    }
+
+    if ((bigWave_.facing > 0 && bigWave_.x > cols_ + 10.0f) ||
+        (bigWave_.facing < 0 && bigWave_.x < -40.0f)) {
+        bigWave_.active = false;
+        bigWave_.nextSpawnTimer = RandFloat(180.0f, 360.0f);
+    }
+}
+
 void Aquarium::UpdateBoat(float dt) {
     if (!boat_.active) {
         boat_.nextSpawnTimer -= dt;
@@ -775,13 +832,80 @@ void Aquarium::UpdateBoat(float dt) {
             boat_.nextFacing = -boat_.nextFacing; // Alternate direction every trip!
             boat_.style = (boat_.style + 1) % 3;
             boat_.x = (boat_.facing > 0) ? -32.0f : static_cast<float>(cols_ + 4);
-            boat_.vx = boat_.facing * RandFloat(2.6f, 3.4f);
+            boat_.baseVx = boat_.facing * RandFloat(2.6f, 3.4f);
+            boat_.vx = boat_.baseVx;
+            boat_.yOffset = 0.0f;
+            boat_.vyOffset = 0.0f;
+            boat_.rockAmp = 0.0f;
+            boat_.rockPhase = 0.0f;
+            boat_.tilt = 0;
             boat_.animPhase = 0.0f;
         }
         return;
     }
 
     boat_.animPhase += dt * 2.8f;
+
+    float boatCenterX = boat_.x + 12.0f;
+    float targetLiftY = 0.0f;
+    boat_.tilt = 0;
+
+    // Dramatic physical interaction when the Big Breaking Surf Wave meets the Boat!
+    if (bigWave_.active) {
+        float waveCrestX = bigWave_.x + (bigWave_.facing < 0 ? 14.0f : 20.0f);
+        float dx = boatCenterX - waveCrestX;
+        float absDx = std::fabs(dx);
+
+        if (absDx < 22.0f) {
+            // Smooth asymmetric wave elevation profile: steep breaking front, gentle back slope
+            float norm = dx / 13.5f;
+            float env = std::exp(-norm * norm * 1.45f);
+            targetLiftY = -3.8f * env; // Boat rises up to ~4 rows high right onto the wave crest!
+
+            // Determine visual pitch tilt while climbing up vs plunging down the wave face
+            if (env > 0.22f) {
+                float slopeSign = (dx * boat_.facing < 0.0f) ? 1.0f : -1.0f;
+                boat_.tilt = (slopeSign > 0.0f) ? 1 : -1;
+            }
+
+            // Horizontal wave surge impulse!
+            // Same direction -> exhilarating surf boost forward!
+            // Head-on collision -> dramatic pushback & crashing white spray!
+            if (env > 0.30f) {
+                bool sameDir = (bigWave_.facing == boat_.facing);
+                float pushForce = sameDir ? (bigWave_.facing * 7.8f * env)
+                                          : (bigWave_.facing * 5.2f * env);
+                boat_.vx += pushForce * dt * 2.8f;
+                boat_.rockAmp = std::max(boat_.rockAmp, 1.35f * env);
+
+                // Dramatic crashing bow spray & aerated splash bubbles
+                if (RandInt(0, 3) == 0) {
+                    Sparkle spray{ boatCenterX + RandFloat(-7.0f, 7.0f),
+                                   static_cast<float>(WATER_Y) + boat_.yOffset + RandFloat(-1.5f, 0.5f),
+                                   0.42f, (RandInt(0, 1) == 0) ? L'\x00B0' : L'*' };
+                    sparkles_.push_back(spray);
+                    SpawnBubble(boatCenterX + RandFloat(-6.0f, 6.0f),
+                                static_cast<float>(WATER_Y) + 1.0f, RandInt(0, 2));
+                }
+                if (env > 0.78f && RandInt(0, 8) == 0) {
+                    Ripple rp{ boatCenterX, static_cast<float>(WATER_Y + 1), 1.4f, 9.0f, 1.0f };
+                    ripples_.push_back(rp);
+                }
+            }
+        }
+    }
+
+    // Spring-damped vertical wave riding + post-wave rocking oscillation
+    boat_.rockPhase += dt * 7.2f;
+    boat_.rockAmp *= std::exp(-dt * 1.15f);
+    float desiredY = targetLiftY + std::sin(boat_.rockPhase) * boat_.rockAmp * 0.75f;
+    float springAcc = (desiredY - boat_.yOffset) * 26.0f - boat_.vyOffset * 6.5f;
+    boat_.vyOffset += springAcc * dt;
+    boat_.yOffset = Clamp(boat_.yOffset + boat_.vyOffset * dt, -4.2f, 1.2f);
+
+    // Smooth horizontal velocity recovery back to steady sailing speed after surfing/impact
+    boat_.vx += (boat_.baseVx - boat_.vx) * std::min(1.0f, dt * 1.75f);
+    boat_.vx = Clamp(boat_.vx, -9.5f, 9.5f);
     boat_.x += boat_.vx * dt;
 
     // Gentle bow wave disturbance as the boat cuts through the water
@@ -1796,14 +1920,78 @@ void Aquarium::DrawSwirls() {
     }
 }
 
+void Aquarium::DrawBigWave() {
+    if (!bigWave_.active) return;
+    const Theme& t = CurrentTheme();
+    int ix = static_cast<int>(std::round(bigWave_.x));
+    int topY = WATER_Y - 5; // 6-row towering surf wave rising cleanly above WATER_Y
+
+    COLORREF baseCol   = t.waterSurface;
+    COLORREF foamCol   = t.waterFoam;
+    COLORREF barrelCol = LerpColor(t.bgTop, t.waterSurface, 0.72f);
+
+    if (bigWave_.facing < 0) {
+        // Iconic breaking surf wave rolling right -> left (breaking left!)
+        const wchar_t* spr[6] = {
+            L"        _.====.._                 ",
+            L"      ,:._      ~-_               ",
+            L"          `\\      ~-_             ",
+            L"            | _ _  | `.           ",
+            L"           ,/ /_)/ | |   ~-_      ",
+            L" -.._..-'  \\_ \\\\ `_     ~~--.._   "
+        };
+        const char* msk[6] = {
+            "        222222222                 ",
+            "      2222000000222               ",
+            "          33000000222             ",
+            "            30303003022           ",
+            "           33033330303000222      ",
+            " 11111111  33033033000002222222   "
+        };
+        PutMaskedSprite(ix, topY, spr, msk, 6, baseCol, foamCol, barrelCol, foamCol);
+
+        // Animated sparkling spray flying off the curling crest lip
+        bool f2 = (static_cast<int>(bigWave_.phase) % 2 == 0);
+        PutChar(ix + 5, topY + (f2 ? 0 : 1), f2 ? L'\x00B0' : L'\x00B7', foamCol);
+        PutChar(ix + 4, topY + 2, f2 ? L'\x00B7' : L'*', foamCol);
+        PutChar(ix + 7, topY + 2, f2 ? L'*' : L'\x00B0', foamCol);
+    } else {
+        // Exact mirror: breaking surf wave rolling left -> right (breaking right!)
+        const wchar_t* spr[6] = {
+            L"                 _..====._        ",
+            L"               _-~      _.:,      ",
+            L"             _-~      /'          ",
+            L"           .' |  _ _ |            ",
+            L"      _-~   | | (\\_\\ \\,           ",
+            L"   _..--~~     _' // _/  '-.._..- "
+        };
+        const char* msk[6] = {
+            "                 222222222        ",
+            "               2220000002222      ",
+            "             22200000033          ",
+            "           22030030303            ",
+            "      22200030303333033           ",
+            "   22222220000033033033  11111111 "
+        };
+        PutMaskedSprite(ix, topY, spr, msk, 6, baseCol, foamCol, barrelCol, foamCol);
+
+        bool f2 = (static_cast<int>(bigWave_.phase) % 2 == 0);
+        PutChar(ix + 28, topY + (f2 ? 0 : 1), f2 ? L'\x00B0' : L'\x00B7', foamCol);
+        PutChar(ix + 29, topY + 2, f2 ? L'\x00B7' : L'*', foamCol);
+        PutChar(ix + 26, topY + 2, f2 ? L'*' : L'\x00B0', foamCol);
+    }
+}
+
 void Aquarium::DrawBoat() {
     if (!boat_.active) return;
     const Theme& t = CurrentTheme();
     int ix = static_cast<int>(std::round(boat_.x));
     bool flagFlip = (static_cast<int>(boat_.animPhase) % 2 == 0);
     float centerX = boat_.x + 12.0f;
-    // Gentle bobbing on the surface waves (hull bottom sits cleanly in WATER_Y)
-    int bob = (SurfaceWaveAt(centerX) > 0.52f) ? -1 : 0;
+    // Combines gentle normal swell bobbing + dramatic lift when riding/surfing the Big Wave!
+    int normalBob = (SurfaceWaveAt(centerX) > 0.52f) ? -1 : 0;
+    int liftRows = static_cast<int>(std::round(boat_.yOffset));
+    int bob = (std::fabs(boat_.yOffset) > 0.35f) ? liftRows : normalBob;
 
     COLORREF hullCol  = t.chestWood;
     COLORREF sailCol  = t.waterFoam;
@@ -1932,13 +2120,21 @@ void Aquarium::DrawBoat() {
         }
     }
 
-    // Crisp trailing wake foam behind the stern along the waterline
+    // Crisp trailing wake foam behind the stern (plus foaming splash under hull when cresting a big wave!)
     int sternX = (boat_.facing >= 0) ? (ix - 1) : (ix + hullLen);
     int dir = -boat_.facing;
+    int wakeY = WATER_Y + std::min(0, bob);
     const wchar_t wakeCh[5] = { L'\x2248', L'~', L'~', L'-', L'\x00B7' };
     for (int k = 0; k < 5; ++k) {
         COLORREF wCol = LerpColor(t.waterSurface, t.waterFoam, 1.0f - k * 0.2f);
-        PutChar(sternX + dir * (k + 1), WATER_Y, wakeCh[k], wCol);
+        PutChar(sternX + dir * (k + 1), wakeY, wakeCh[k], wCol);
+    }
+    if (boat_.yOffset < -0.6f) {
+        // Dramatic white foam spray surging right beneath the surfing hull!
+        int bowX = (boat_.facing >= 0) ? (ix + hullLen - 2) : (ix + 1);
+        PutChar(bowX,             wakeY,     L'\x00B0', t.waterFoam);
+        PutChar(bowX + boat_.facing, wakeY - 1, L'*',   t.waterFoam);
+        PutChar(ix + hullLen / 2, wakeY + 1, L'\x2248', t.waterFoam);
     }
 }
 
@@ -2948,6 +3144,7 @@ void Aquarium::Render() {
     DrawRipples();
     DrawSparkles();
     DrawSurface();
-    DrawBoat();          // serene surface boats gliding one at a time, alternating directions
+    DrawBigWave();       // dramatic periodic breaking surf wave rolling across the surface
+    DrawBoat();          // serene surface boats that climb, surf, and rock on the big wave!
     DrawSubmarine(true); // conning tower & periscope rising above the waves!
 }
